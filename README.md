@@ -1,2 +1,2 @@
 # SIGN_globe
-Building an interactive globe for SIGN Fracture Care
+This project involves creating an interactive 3D globe that can be seamlessly embedded into an existing webpage. The globe will feature location-based pins representing patients helped by SIGN Fracture Care International. When a pin is clicked, a pop-up window will display the patient’s story, using content from the public patient stories on the SIGN website. Users can minimize the story window and continue exploring by rotating the globe and selecting other pins. The goal is to make updating and adding stories simple, with a structure that allows non-technical users to manage the content without coding.
