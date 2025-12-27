@@ -73,9 +73,7 @@ async function loadStoriesFromGoogleSheet() {
 
 function makePanel(container) {
   const panel = document.createElement("div");
-
-  // ✅ tag so we can avoid disabling pointer events on it
-  panel.dataset.sgPanel = "1";
+  panel.dataset.sgPanel = "1"; // ✅ do not disable pointer events for this element
 
   panel.style.cssText = `
     position:absolute; right:16px; top:16px; width:min(420px, 92%);
@@ -144,10 +142,10 @@ function makePanel(container) {
 }
 
 /**
- * Key trick:
- * - Set globe.gl overlay container pointer-events to NONE so dragging works
- * - Keep pins pointer-events to AUTO so pins are clickable
- * - DO NOT touch our story panel (it's absolute-positioned too)
+ * Fix drag + click:
+ * - Ensure canvas gets pointer events
+ * - Disable pointer events on absolute overlay layers (except our panel)
+ * - Pins are explicitly pointer-events:auto
  */
 function fixOverlayPointerEvents(container) {
   let tries = 0;
@@ -155,18 +153,29 @@ function fixOverlayPointerEvents(container) {
   const tick = () => {
     tries++;
 
-    const absDivs = Array.from(container.querySelectorAll("div")).filter((el) => {
-      if (el.dataset.sgPanel === "1") return false; // ✅ don't disable popup panel
+    // Ensure canvas can receive drag events
+    const canvas = container.querySelector("canvas");
+    if (canvas) {
+      canvas.style.pointerEvents = "auto";
+      canvas.style.touchAction = "none";
+    }
+
+    container.style.touchAction = "none";
+
+    // Disable pointer events on absolute overlays, but not our panel
+    const divs = Array.from(container.querySelectorAll("div"));
+    divs.forEach((el) => {
+      if (el.dataset.sgPanel === "1") {
+        el.style.pointerEvents = "auto";
+        return;
+      }
       const cs = getComputedStyle(el);
-      return cs.position === "absolute";
+      if (cs.position === "absolute") {
+        el.style.pointerEvents = "none";
+      }
     });
 
-    // Make overlays transparent to mouse (so globe drag works)
-    absDivs.forEach((el) => {
-      el.style.pointerEvents = "none";
-    });
-
-    if (tries < 20) requestAnimationFrame(tick);
+    if (tries < 30) requestAnimationFrame(tick);
   };
 
   requestAnimationFrame(tick);
@@ -184,7 +193,7 @@ export async function mountSignGlobe({ containerId = "sign-globe", height = 650 
     .globeImageUrl("https://unpkg.com/three-globe/example/img/earth-blue-marble.jpg")
     .backgroundColor("rgba(0,0,0,0)");
 
-  // ✅ Make it rotatable/draggable (explicit)
+  // Make it rotatable/draggable (explicit)
   const controls = globe.controls();
   controls.enabled = true;
   controls.enableRotate = true;
@@ -192,16 +201,12 @@ export async function mountSignGlobe({ containerId = "sign-globe", height = 650 
   controls.enablePan = false;
   controls.enableDamping = true;
   controls.dampingFactor = 0.08;
-
-  // optional: slow auto-rotate
   controls.autoRotate = true;
   controls.autoRotateSpeed = 0.5;
 
   const panel = makePanel(container);
-
   fixOverlayPointerEvents(container);
 
-  // ✅ Load from Google Sheet
   const stories = await loadStoriesFromGoogleSheet();
 
   globe
@@ -210,8 +215,6 @@ export async function mountSignGlobe({ containerId = "sign-globe", height = 650 
     .htmlLng((d) => d.pin_lon)
     .htmlElement((d) => {
       const pin = document.createElement("div");
-
-      // ✅ teardrop pin
       pin.style.cssText = `
         width:22px;
         height:22px;
@@ -240,7 +243,7 @@ export async function mountSignGlobe({ containerId = "sign-globe", height = 650 
 
       pin.title = d.pin_label || d.title || "";
 
-      // ✅ prevent click from becoming a drag
+      // Prevent click from becoming a drag
       pin.addEventListener("pointerdown", (e) => {
         e.stopPropagation();
       });
