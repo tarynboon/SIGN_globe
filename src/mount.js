@@ -16,7 +16,6 @@ async function loadStoriesFromGoogleSheet() {
   if (!res.ok) throw new Error(`Failed to load sheet: ${res.status}`);
 
   const text = await res.text();
-
   const start = text.indexOf("{");
   const end = text.lastIndexOf("}");
   if (start === -1 || end === -1) {
@@ -73,7 +72,7 @@ async function loadStoriesFromGoogleSheet() {
 
 function makePanel(container) {
   const panel = document.createElement("div");
-  panel.dataset.sgPanel = "1"; // ✅ do not disable pointer events for this element
+  panel.dataset.sgPanel = "1";
 
   panel.style.cssText = `
     position:absolute; right:16px; top:16px; width:min(420px, 92%);
@@ -81,8 +80,8 @@ function makePanel(container) {
     box-shadow:0 8px 24px rgba(0,0,0,.18); padding:14px;
     display:none; z-index:999999;
     font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+    pointer-events:auto;
   `;
-  panel.style.pointerEvents = "auto";
 
   panel.innerHTML = `
     <div style="display:flex; justify-content:space-between; gap:12px; align-items:flex-start;">
@@ -142,40 +141,43 @@ function makePanel(container) {
 }
 
 /**
- * Fix drag + click:
- * - Ensure canvas gets pointer events
- * - Disable pointer events on absolute overlay layers (except our panel)
- * - Pins are explicitly pointer-events:auto
+ * Brutal but reliable:
+ * - Turn OFF pointer events for everything inside container
+ * - Turn ON pointer events for canvas, pins, and the panel
+ * This guarantees OrbitControls gets drag events.
  */
-function fixOverlayPointerEvents(container) {
+function enforcePointerEvents(container) {
   let tries = 0;
 
   const tick = () => {
     tries++;
 
-    // Ensure canvas can receive drag events
+    // Make drag work on trackpads/touch
+    container.style.touchAction = "none";
+
+    // 1) Disable pointer events everywhere
+    container.querySelectorAll("*").forEach((el) => {
+      el.style.pointerEvents = "none";
+    });
+
+    // 2) Re-enable canvas (this is what OrbitControls listens on)
     const canvas = container.querySelector("canvas");
     if (canvas) {
       canvas.style.pointerEvents = "auto";
       canvas.style.touchAction = "none";
     }
 
-    container.style.touchAction = "none";
+    // 3) Re-enable our story panel
+    const panel = container.querySelector('[data-sg-panel="1"]');
+    if (panel) panel.style.pointerEvents = "auto";
 
-    // Disable pointer events on absolute overlays, but not our panel
-    const divs = Array.from(container.querySelectorAll("div"));
-    divs.forEach((el) => {
-      if (el.dataset.sgPanel === "1") {
-        el.style.pointerEvents = "auto";
-        return;
-      }
-      const cs = getComputedStyle(el);
-      if (cs.position === "absolute") {
-        el.style.pointerEvents = "none";
-      }
+    // 4) Re-enable pins
+    container.querySelectorAll(".sg-pin").forEach((pin) => {
+      pin.style.pointerEvents = "auto";
     });
 
-    if (tries < 30) requestAnimationFrame(tick);
+    // globe.gl may add layers async; keep retrying a bit
+    if (tries < 40) requestAnimationFrame(tick);
   };
 
   requestAnimationFrame(tick);
@@ -193,7 +195,12 @@ export async function mountSignGlobe({ containerId = "sign-globe", height = 650 
     .globeImageUrl("https://unpkg.com/three-globe/example/img/earth-blue-marble.jpg")
     .backgroundColor("rgba(0,0,0,0)");
 
-  // Make it rotatable/draggable (explicit)
+  // ✅ explicitly enable pointer interaction (just in case)
+  if (typeof globe.enablePointerInteraction === "function") {
+    globe.enablePointerInteraction(true);
+  }
+
+  // ✅ explicitly enable controls
   const controls = globe.controls();
   controls.enabled = true;
   controls.enableRotate = true;
@@ -201,11 +208,15 @@ export async function mountSignGlobe({ containerId = "sign-globe", height = 650 
   controls.enablePan = false;
   controls.enableDamping = true;
   controls.dampingFactor = 0.08;
+
+  // optional auto-spin
   controls.autoRotate = true;
   controls.autoRotateSpeed = 0.5;
 
   const panel = makePanel(container);
-  fixOverlayPointerEvents(container);
+
+  // ✅ enforce pointer events after layers mount
+  enforcePointerEvents(container);
 
   const stories = await loadStoriesFromGoogleSheet();
 
@@ -215,6 +226,8 @@ export async function mountSignGlobe({ containerId = "sign-globe", height = 650 
     .htmlLng((d) => d.pin_lon)
     .htmlElement((d) => {
       const pin = document.createElement("div");
+      pin.className = "sg-pin";
+
       pin.style.cssText = `
         width:22px;
         height:22px;
@@ -224,7 +237,6 @@ export async function mountSignGlobe({ containerId = "sign-globe", height = 650 
         cursor:pointer;
         position:relative;
         z-index:99999;
-        pointer-events:auto;
         box-shadow: 0 3px 6px rgba(0,0,0,0.4);
       `;
 
@@ -243,10 +255,8 @@ export async function mountSignGlobe({ containerId = "sign-globe", height = 650 
 
       pin.title = d.pin_label || d.title || "";
 
-      // Prevent click from becoming a drag
-      pin.addEventListener("pointerdown", (e) => {
-        e.stopPropagation();
-      });
+      // prevent click from being treated as drag
+      pin.addEventListener("pointerdown", (e) => e.stopPropagation());
 
       pin.addEventListener("click", (e) => {
         e.preventDefault();
