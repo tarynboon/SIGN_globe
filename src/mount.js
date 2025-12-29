@@ -1,4 +1,5 @@
 import Globe from "globe.gl";
+import * as THREE from "three";
 
 async function loadStoriesFromGoogleSheet() {
   const SHEET_ID = "1poB9Dj7m8dFoiVCtjd9BSzp1dqNVTclAakET4ARwVGE";
@@ -23,7 +24,6 @@ async function loadStoriesFromGoogleSheet() {
   }
 
   const json = JSON.parse(text.slice(start, end + 1));
-
   const colsRaw = (json.table.cols || []).map((c) => (c.label ?? ""));
   const cols = colsRaw.map((s) => s.trim().toLowerCase());
   const rows = json.table.rows || [];
@@ -65,15 +65,11 @@ async function loadStoriesFromGoogleSheet() {
 
   console.log("Sheet headers:", colsRaw);
   console.log("Rows fetched:", raw.length, "Valid pins:", stories.length);
-  if (stories.length) console.log("Example story:", stories[0]);
-
   return stories;
 }
 
 function makePanel(container) {
   const panel = document.createElement("div");
-  panel.dataset.sgPanel = "1";
-
   panel.style.cssText = `
     position:absolute; right:16px; top:16px; width:min(420px, 92%);
     max-height:80%; overflow:auto; background:#fff; border-radius:12px;
@@ -140,47 +136,24 @@ function makePanel(container) {
   };
 }
 
-/**
- * Brutal but reliable:
- * - Turn OFF pointer events for everything inside container
- * - Turn ON pointer events for canvas, pins, and the panel
- * This guarantees OrbitControls gets drag events.
- */
-function enforcePointerEvents(container) {
-  let tries = 0;
+// Create a simple 3D “pin”: sphere head + cone body
+function makePinMesh() {
+  const group = new THREE.Group();
 
-  const tick = () => {
-    tries++;
+  const red = new THREE.MeshStandardMaterial({ color: 0xd32f2f });
+  const white = new THREE.MeshStandardMaterial({ color: 0xffffff });
 
-    // Make drag work on trackpads/touch
-    container.style.touchAction = "none";
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.18, 16, 16), red);
+  head.position.set(0, 0.35, 0);
 
-    // 1) Disable pointer events everywhere
-    container.querySelectorAll("*").forEach((el) => {
-      el.style.pointerEvents = "none";
-    });
+  const dot = new THREE.Mesh(new THREE.SphereGeometry(0.07, 12, 12), white);
+  dot.position.set(0, 0.35, 0.14);
 
-    // 2) Re-enable canvas (this is what OrbitControls listens on)
-    const canvas = container.querySelector("canvas");
-    if (canvas) {
-      canvas.style.pointerEvents = "auto";
-      canvas.style.touchAction = "none";
-    }
+  const body = new THREE.Mesh(new THREE.ConeGeometry(0.16, 0.45, 16), red);
+  body.position.set(0, 0.1, 0);
 
-    // 3) Re-enable our story panel
-    const panel = container.querySelector('[data-sg-panel="1"]');
-    if (panel) panel.style.pointerEvents = "auto";
-
-    // 4) Re-enable pins
-    container.querySelectorAll(".sg-pin").forEach((pin) => {
-      pin.style.pointerEvents = "auto";
-    });
-
-    // globe.gl may add layers async; keep retrying a bit
-    if (tries < 40) requestAnimationFrame(tick);
-  };
-
-  requestAnimationFrame(tick);
+  group.add(body, head, dot);
+  return group;
 }
 
 export async function mountSignGlobe({ containerId = "sign-globe", height = 650 } = {}) {
@@ -195,12 +168,7 @@ export async function mountSignGlobe({ containerId = "sign-globe", height = 650 
     .globeImageUrl("https://unpkg.com/three-globe/example/img/earth-blue-marble.jpg")
     .backgroundColor("rgba(0,0,0,0)");
 
-  // ✅ explicitly enable pointer interaction (just in case)
-  if (typeof globe.enablePointerInteraction === "function") {
-    globe.enablePointerInteraction(true);
-  }
-
-  // ✅ explicitly enable controls
+  // Make it draggable
   const controls = globe.controls();
   controls.enabled = true;
   controls.enableRotate = true;
@@ -208,64 +176,28 @@ export async function mountSignGlobe({ containerId = "sign-globe", height = 650 
   controls.enablePan = false;
   controls.enableDamping = true;
   controls.dampingFactor = 0.08;
-
-  // optional auto-spin
   controls.autoRotate = true;
   controls.autoRotateSpeed = 0.5;
 
+  // Lighting (so the pin meshes look good)
+  globe.scene().add(new THREE.AmbientLight(0xffffff, 0.9));
+  const dir = new THREE.DirectionalLight(0xffffff, 0.8);
+  dir.position.set(1, 1, 1);
+  globe.scene().add(dir);
+
   const panel = makePanel(container);
-
-  // ✅ enforce pointer events after layers mount
-  enforcePointerEvents(container);
-
   const stories = await loadStoriesFromGoogleSheet();
 
+  // ✅ 3D pins (no DOM overlays to block dragging)
   globe
-    .htmlElementsData(stories)
-    .htmlLat((d) => d.pin_lat)
-    .htmlLng((d) => d.pin_lon)
-    .htmlElement((d) => {
-      const pin = document.createElement("div");
-      pin.className = "sg-pin";
-
-      pin.style.cssText = `
-        width:22px;
-        height:22px;
-        background:#d32f2f;
-        border-radius:50% 50% 50% 0;
-        transform:rotate(-45deg);
-        cursor:pointer;
-        position:relative;
-        z-index:99999;
-        box-shadow: 0 3px 6px rgba(0,0,0,0.4);
-      `;
-
-      const inner = document.createElement("div");
-      inner.style.cssText = `
-        width:10px;
-        height:10px;
-        background:white;
-        border-radius:50%;
-        position:absolute;
-        top:6px;
-        left:6px;
-        pointer-events:none;
-      `;
-      pin.appendChild(inner);
-
-      pin.title = d.pin_label || d.title || "";
-
-      // prevent click from being treated as drag
-      pin.addEventListener("pointerdown", (e) => e.stopPropagation());
-
-      pin.addEventListener("click", (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        console.log("PIN CLICK", d.id);
-        panel.open(d);
-      });
-
-      return pin;
+    .objectsData(stories)
+    .objectLat((d) => d.pin_lat)
+    .objectLng((d) => d.pin_lon)
+    .objectAltitude(0.03)
+    .objectThreeObject(() => makePinMesh())
+    .onObjectClick((d) => {
+      console.log("PIN CLICK", d.id);
+      panel.open(d);
     });
 
   console.log("Globe mounted. Pins:", stories.length);
