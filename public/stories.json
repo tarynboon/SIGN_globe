@@ -1,25 +1,24 @@
 {
-    "stories": [
-      {
-        "id": "demo-1",
-        "pin_lat": 14.0583,
-        "pin_lon": 108.2772,
-        "pin_label": "Vietnam (demo pin)",
-        "title": "Patient story (demo)",
-        "country": "Vietnam",
-        "story_html": "<p>This is a demo story. Replace with SIGN patient story excerpt and keep the source link.</p>",
-        "source_url": "https://www.signfracturecare.org/patient-gallery"
-      },
-      {
-        "id": "demo-2",
-        "pin_lat": -1.286389,
-        "pin_lon": 36.817223,
-        "pin_label": "Nairobi, Kenya (demo pin)",
-        "title": "Another story (demo)",
-        "country": "Kenya",
-        "story_html": "<p>Click different pins to switch stories. You can minimize this panel and keep rotating the globe.</p>",
-        "source_url": "https://www.signfracturecare.org/patient-gallery"
-      }
-    ]
-  }
-  
+  "stories": [
+    {
+      "id": "demo-1",
+      "pin_lat": 14.0583,
+      "pin_lon": 108.2772,
+      "pin_label": "Vietnam (demo)",
+      "title": "Patient story (demo)",
+      "country": "Vietnam",
+      "story_html": "<p>demo story </p>",
+      "source_url": "https://www.signfracturecare.org/patients"
+    },
+    {
+      "id": "demo-2",
+      "pin_lat": -1.286389,
+      "pin_lon": 36.817223,
+      "pin_label": "Nairobi, Kenya",
+      "title": "Patient story (demo)",
+      "country": "Kenya",
+      "story_html": "<p>demo story </p>",
+      "source_url": "https://www.signfracturecare.org/patients"
+    }
+  ]
+}
