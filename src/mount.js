@@ -181,7 +181,6 @@ function disableBlockingOverlays(container) {
 
   requestAnimationFrame(tick);
 }
-
 function makePinMesh() {
   const group = new THREE.Group();
 
@@ -198,6 +197,11 @@ function makePinMesh() {
   body.position.set(0, 0.1, 0);
 
   group.add(body, head, dot);
+
+  // ✅ VISIBILITY FIX
+  group.scale.set(2.5, 2.5, 2.5);
+  group.lookAt(0, 0, 0);
+
   return group;
 }
 
@@ -256,7 +260,7 @@ export async function mountSignGlobe({ containerId = "sign-globe", height = 650 
     .objectsData(stories)
     .objectLat((d) => d.pin_lat)
     .objectLng((d) => d.pin_lon)
-    .objectAltitude(0.03)
+    .objectAltitude(0.12)
     .objectThreeObject(() => makePinMesh())
     .onObjectClick((d) => {
       console.log("PIN CLICK", d.id);
