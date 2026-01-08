@@ -5137,11 +5137,21 @@ In order to be iterable, non-array objects must have a [Symbol.iterator]() metho
         <button id="sg-close" style="cursor:pointer;">×</button>
       </div>
     </div>
-    <div id="sg-body" style="margin-top:10px; line-height:1.45;"></div>
-    <div style="margin-top:10px;">
-      <a id="sg-src" href="#" target="_blank" rel="noopener">Read on SIGN</a>
+
+    <div id="sg-image" style="margin-top:10px; display:none;">
+      <img
+        id="sg-img"
+        style="
+          width:100%;
+          max-height:220px;
+          object-fit:cover;
+          border-radius:8px;
+        "
+       />
     </div>
-  `,i.appendChild(e);const t=e.querySelector("#sg-title"),n=e.querySelector("#sg-meta"),r=e.querySelector("#sg-body"),s=e.querySelector("#sg-src");return e.querySelector("#sg-close").onclick=()=>{e.style.display="none",e.style.pointerEvents="none"},e.querySelector("#sg-min").onclick=()=>{const o=e.dataset.min==="1";e.dataset.min=o?"0":"1",r.style.display=o?"block":"none",s.style.display=o?"inline":"none",o?(e.style.width="min(420px, 92%)",e.style.maxHeight="80%"):(e.style.width="220px",e.style.maxHeight="60px"),e.style.pointerEvents="auto"},{open(o){t.textContent=o.title||"",n.textContent=o.country||"",r.innerHTML=o.story_html||"",s.href=o.source_url||"https://www.signfracturecare.org/patient-gallery",e.dataset.min="0",e.style.width="min(420px, 92%)",e.style.maxHeight="80%",r.style.display="block",s.style.display="inline",e.style.display="block",e.style.pointerEvents="auto"}}}function $oe(i){requestAnimationFrame(()=>{const e=i.querySelector("canvas");e&&(e.style.pointerEvents="auto"),Array.from(i.querySelectorAll("div")).forEach(n=>{const r=getComputedStyle(n);(r.position==="absolute"||r.transform!=="none")&&r.pointerEvents==="none"&&(n.style.pointerEvents="auto")})})}async function joe({containerId:i="sign-globe",storiesUrl:e="/stories.json",height:t=650}={}){const n=document.getElementById(i);if(!n)throw new Error(`Missing element #${i}`);n.style.position="relative",n.style.width="100%",n.style.height=typeof t=="number"?`${t}px`:t;const r=zoe()(n).globeImageUrl("https://unpkg.com/three-globe/example/img/earth-blue-marble.jpg").backgroundColor("rgba(0,0,0,0)"),s=n.querySelector("canvas");s&&(s.style.position="absolute",s.style.inset="0",s.style.zIndex="0",s.style.pointerEvents="auto");const o=Woe(n),a=await Hoe(e);return r.htmlElementsData(a.stories||[]).htmlLat(l=>l.pin_lat).htmlLng(l=>l.pin_lon).htmlElement(l=>{const u=document.createElement("div");u.style.cssText=`
+
+    <div id="sg-body" style="margin-top:10px; line-height:1.45;"></div>
+  `,i.appendChild(e);const t=e.querySelector("#sg-image"),n=e.querySelector("#sg-img"),r=e.querySelector("#sg-title"),s=e.querySelector("#sg-meta"),o=e.querySelector("#sg-body");return e.querySelector("#sg-close").onclick=()=>{e.style.display="none",e.style.pointerEvents="none"},e.querySelector("#sg-min").onclick=()=>{const a=e.dataset.min==="1";e.dataset.min=a?"0":"1",o.style.display=a?"block":"none",srcEl.style.display=a?"inline":"none",a?(e.style.width="min(420px, 92%)",e.style.maxHeight="80%"):(e.style.width="220px",e.style.maxHeight="60px"),e.style.pointerEvents="auto"},{open(a){r.textContent=a.title||"",s.textContent=a.country||"",a.image_url?(n.src=a.image_url,t.style.display="block"):(n.src="",t.style.display="none"),o.innerHTML=a.story_html||"",srcEl.href=a.source_url||"https://www.signfracturecare.org/patient-gallery",e.dataset.min="0",e.style.width="min(420px, 92%)",e.style.maxHeight="80%",o.style.display="block",srcEl.style.display="inline",e.style.display="block",e.style.pointerEvents="auto"}}}function $oe(i){requestAnimationFrame(()=>{const e=i.querySelector("canvas");e&&(e.style.pointerEvents="auto"),Array.from(i.querySelectorAll("div")).forEach(n=>{const r=getComputedStyle(n);(r.position==="absolute"||r.transform!=="none")&&r.pointerEvents==="none"&&(n.style.pointerEvents="auto")})})}async function joe({containerId:i="sign-globe",storiesUrl:e="/stories.json",height:t=650}={}){const n=document.getElementById(i);if(!n)throw new Error(`Missing element #${i}`);n.style.position="relative",n.style.width="100%",n.style.height=typeof t=="number"?`${t}px`:t;const r=zoe()(n).globeImageUrl("https://unpkg.com/three-globe/example/img/earth-blue-marble.jpg").backgroundColor("rgba(0,0,0,0)"),s=n.querySelector("canvas");s&&(s.style.position="absolute",s.style.inset="0",s.style.zIndex="0",s.style.pointerEvents="auto");const o=Woe(n),a=await Hoe(e);return r.htmlElementsData(a.stories||[]).htmlLat(l=>l.pin_lat).htmlLng(l=>l.pin_lon).htmlElement(l=>{const u=document.createElement("div");u.style.cssText=`
         width: 22px;
         height: 22px;
         background: #d32f2f;
