@@ -173,13 +173,12 @@ function disableBlockingOverlays(container) {
   requestAnimationFrame(tick);
 }
 
-// Draw a Google-Maps-ish pin to a canvas and use it as a THREE sprite texture.
-// Sprites stay visible and don't get occluded by the globe surface.
+// Google-Maps style teardrop pin (canvas texture) -> THREE sprite
 function makeGooglePinTexture({
-  size = 256,
-  fill = "#EA4335",
-  stroke = "rgba(0,0,0,0.45)",
-  strokeWidth = 14,
+  size = 512,
+  fill = "#ff4d4d",
+  stroke = "#d93636",
+  strokeWidth = 28,
 } = {}) {
   const canvas = document.createElement("canvas");
   canvas.width = size;
@@ -191,38 +190,53 @@ function makeGooglePinTexture({
   ctx.clearRect(0, 0, size, size);
 
   const cx = size / 2;
-  const cy = size / 2;
-  const r = size * 0.30;
+  const cy = size * 0.40;
+  const r = size * 0.22;
+  const tipY = size * 0.92;
 
   // shadow
   ctx.save();
   ctx.shadowColor = "rgba(0,0,0,0.35)";
-  ctx.shadowBlur = size * 0.08;
+  ctx.shadowBlur = size * 0.06;
   ctx.shadowOffsetY = size * 0.04;
 
-  // main circle
-  ctx.fillStyle = fill;
-  ctx.beginPath();
-  ctx.arc(cx, cy, r, 0, Math.PI * 2);
-  ctx.fill();
+  const path = new Path2D();
 
-  // outline
+  // top circle arc (partial)
+  path.arc(cx, cy, r, Math.PI * 0.15, Math.PI * 0.85, true);
+
+  // left curve to tip
+  path.bezierCurveTo(
+    cx - r * 1.25, cy + r * 0.9,
+    cx - r * 0.45, cy + r * 2.2,
+    cx, tipY
+  );
+
+  // right curve back up
+  path.bezierCurveTo(
+    cx + r * 0.45, cy + r * 2.2,
+    cx + r * 1.25, cy + r * 0.9,
+    cx + r * 0.98, cy + r * 0.05
+  );
+
+  path.closePath();
+
+  // fill + outline
+  ctx.fillStyle = fill;
+  ctx.fill(path);
+
   ctx.lineWidth = strokeWidth;
   ctx.strokeStyle = stroke;
-  ctx.stroke();
+  ctx.lineJoin = "round";
+  ctx.lineCap = "round";
+  ctx.stroke(path);
 
   ctx.restore();
 
-  // white center dot
-  ctx.fillStyle = "#ffffff";
+  // inner dark circle
+  ctx.fillStyle = "#7a0000";
   ctx.beginPath();
-  ctx.arc(cx, cy, r * 0.40, 0, Math.PI * 2);
-  ctx.fill();
-
-  // glossy highlight
-  ctx.fillStyle = "rgba(255,255,255,0.22)";
-  ctx.beginPath();
-  ctx.ellipse(cx - r * 0.35, cy - r * 0.35, r * 0.55, r * 0.35, -0.35, 0, Math.PI * 2);
+  ctx.arc(cx, cy, r * 0.42, 0, Math.PI * 2);
   ctx.fill();
 
   const tex = new THREE.CanvasTexture(canvas);
@@ -235,18 +249,16 @@ function makeGooglePinSprite() {
   const material = new THREE.SpriteMaterial({
     map: texture,
     transparent: true,
-    depthTest: false,
+    depthTest: false, // always visible
     depthWrite: false,
   });
 
   const sprite = new THREE.Sprite(material);
 
-  // ✅ BIG: make it easily visible and clickable
-  sprite.scale.set(5.0, 5.0, 1);
+  // ~1cm-ish on typical desktop displays
+  sprite.scale.set(4.2, 4.2, 1);
 
-  // ✅ draw on top
   sprite.renderOrder = 999;
-
   return sprite;
 }
 
@@ -283,7 +295,6 @@ export async function mountSignGlobe({ containerId = "sign-globe", height = 650 
   controls.autoRotate = true;
   controls.autoRotateSpeed = 0.5;
 
-  // Simple ambient light (sprites don't need it, but harmless)
   globe.scene().add(new THREE.AmbientLight(0xffffff, 0.9));
 
   const panel = makePanel(container);
@@ -297,9 +308,8 @@ export async function mountSignGlobe({ containerId = "sign-globe", height = 650 
     .objectsData(stories)
     .objectLat((d) => d.pin_lat)
     .objectLng((d) => d.pin_lon)
-    .objectAltitude(0.10) // lifted above surface
-    .objectThreeObject(() => makeGooglePinSprite())
     .objectAltitude(0.12)
+    .objectThreeObject(() => makeGooglePinSprite())
     .onObjectClick((d) => {
       console.log("PIN CLICK", d.id);
       panel.open(d);
