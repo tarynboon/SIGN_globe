@@ -175,50 +175,48 @@ function disableBlockingOverlays(container) {
 
 // Google-Maps style teardrop pin (canvas texture) -> THREE sprite
 function makeGooglePinTexture({
-  size = 512,
+  w = 512,
+  h = 768,                 // ✅ taller so you see the point
   fill = "#ff4d4d",
   stroke = "#d93636",
-  strokeWidth = 28,
+  strokeWidth = 34,
 } = {}) {
   const canvas = document.createElement("canvas");
-  canvas.width = size;
-  canvas.height = size;
+  canvas.width = w;
+  canvas.height = h;
 
   const ctx = canvas.getContext("2d");
   if (!ctx) throw new Error("Canvas 2D context not available");
+  ctx.clearRect(0, 0, w, h);
 
-  ctx.clearRect(0, 0, size, size);
-
-  const cx = size / 2;
-  const cy = size * 0.40;
-  const r = size * 0.22;
-  const tipY = size * 0.92;
+  const cx = w / 2;
+  const cy = h * 0.33;     // top circle center
+  const r = w * 0.22;      // circle radius
+  const tipY = h * 0.93;   // tip near bottom
 
   // shadow
   ctx.save();
   ctx.shadowColor = "rgba(0,0,0,0.35)";
-  ctx.shadowBlur = size * 0.06;
-  ctx.shadowOffsetY = size * 0.04;
+  ctx.shadowBlur = w * 0.10;
+  ctx.shadowOffsetY = h * 0.02;
 
   const path = new Path2D();
 
-  // top circle arc (partial)
-  path.arc(cx, cy, r, Math.PI * 0.15, Math.PI * 0.85, true);
+  // full circle head
+  path.arc(cx, cy, r, 0, Math.PI * 2);
 
-  // left curve to tip
+  // smooth “shoulders” down into the point
+  path.moveTo(cx - r * 0.95, cy + r * 0.10);
   path.bezierCurveTo(
-    cx - r * 1.25, cy + r * 0.9,
-    cx - r * 0.45, cy + r * 2.2,
+    cx - r * 1.35, cy + r * 1.05,
+    cx - r * 0.55, cy + r * 2.55,
     cx, tipY
   );
-
-  // right curve back up
   path.bezierCurveTo(
-    cx + r * 0.45, cy + r * 2.2,
-    cx + r * 1.25, cy + r * 0.9,
-    cx + r * 0.98, cy + r * 0.05
+    cx + r * 0.55, cy + r * 2.55,
+    cx + r * 1.35, cy + r * 1.05,
+    cx + r * 0.95, cy + r * 0.10
   );
-
   path.closePath();
 
   // fill + outline
@@ -233,7 +231,7 @@ function makeGooglePinTexture({
 
   ctx.restore();
 
-  // inner dark circle
+  // inner dark dot
   ctx.fillStyle = "#7a0000";
   ctx.beginPath();
   ctx.arc(cx, cy, r * 0.42, 0, Math.PI * 2);
@@ -246,37 +244,25 @@ function makeGooglePinTexture({
 
 function makeGooglePinSprite() {
   const texture = makeGooglePinTexture();
+
   const material = new THREE.SpriteMaterial({
     map: texture,
     transparent: true,
-
-    // Make them behave like they're on the globe surface (occlude behind the globe)
-    depthTest: true,
+    depthTest: true,     // ✅ hides behind globe when on far side
     depthWrite: false,
   });
 
   const sprite = new THREE.Sprite(material);
 
-  // ✅ Big + easy to click (~1 cm-ish)
-  sprite.scale.set(4.2, 4.2, 1);
+  // ✅ BIG (increase if you want even bigger)
+  sprite.scale.set(7.0, 10.5, 1); // tall aspect ratio matches texture
 
-  // ✅ Anchor the sprite at the TIP of the pin:
-  // (0.5 = centered horizontally, ~0.93–0.98 near bottom)
-  sprite.center.set(0.5, 0.95);
+  // ✅ Anchor at tip so point touches the globe
+  sprite.center.set(0.5, 0.98);
 
-  sprite.renderOrder = 999;
   return sprite;
 }
 
-
-  const sprite = new THREE.Sprite(material);
-
-  // ~1cm-ish on typical desktop displays
-  sprite.scale.set(4.2, 4.2, 1);
-
-  sprite.renderOrder = 999;
-  return sprite;
-}
 
 export async function mountSignGlobe({ containerId = "sign-globe", height = 650 } = {}) {
   const container = document.getElementById(containerId);
@@ -309,7 +295,7 @@ export async function mountSignGlobe({ containerId = "sign-globe", height = 650 
 
   // Optional auto-rotate (still draggable)
   controls.autoRotate = true;
-  controls.autoRotateSpeed = 0.05;
+  controls.autoRotateSpeed = 0.001;
 
   globe.scene().add(new THREE.AmbientLight(0xffffff, 0.9));
 
@@ -324,7 +310,7 @@ export async function mountSignGlobe({ containerId = "sign-globe", height = 650 
     .objectsData(stories)
     .objectLat((d) => d.pin_lat)
     .objectLng((d) => d.pin_lon)
-    .objectAltitude(0.01)
+    .objectAltitude(0.001)
     .objectThreeObject(() => makeGooglePinSprite())
     .onObjectClick((d) => {
       console.log("PIN CLICK", d.id);
