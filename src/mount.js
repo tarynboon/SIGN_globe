@@ -305,18 +305,53 @@ export async function mountSignGlobe({ containerId = "sign-globe", height = 650 
   disableBlockingOverlays(container);
 
   const stories = await loadStoriesFromGoogleSheet();
+  // after: const stories = await loadStoriesFromGoogleSheet();
 
   globe
-    .objectsData(stories)
-    .objectLat((d) => d.pin_lat)
-    .objectLng((d) => d.pin_lon)
-    .objectAltitude(0.001)
-    .objectThreeObject(() => makeGooglePinSprite())
-    .onObjectClick((d) => {
-      console.log("PIN CLICK", d.id);
-      panel.open(d);
-    });
+  .objectsData(stories)
+  .objectLat(d => d.pin_lat)
+  .objectLng(d => d.pin_lon)
+  .objectAltitude(0.1) // visible above surface
+  .objectThreeObject(() => {
+    // simple visible marker (safe)
+    const texCanvas = document.createElement("canvas");
+    texCanvas.width = 128;
+    texCanvas.height = 128;
+    const ctx = texCanvas.getContext("2d");
 
-  console.log("Globe mounted. Pins:", stories.length);
-  return globe;
-}
+    // red circle + white dot
+    ctx.clearRect(0, 0, 128, 128);
+    ctx.fillStyle = "#ff4d4d";
+    ctx.beginPath();
+    ctx.arc(64, 64, 44, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "#ffffff";
+    ctx.beginPath();
+    ctx.arc(64, 64, 18, 0, Math.PI * 2);
+    ctx.fill();
+
+    const texture = new THREE.CanvasTexture(texCanvas);
+
+    const sprite = new THREE.Sprite(
+      new THREE.SpriteMaterial({
+        map: texture,
+        transparent: true,
+        depthTest: true,
+        depthWrite: false,
+      })
+    );
+
+    // big and clickable
+    sprite.scale.set(5.5, 5.5, 1);
+    sprite.center.set(0.5, 0.5);
+
+    return sprite;
+  })
+  .onObjectClick(d => {
+    console.log("PIN CLICK", d.id);
+    panel.open(d);
+  });
+
+    console.log("Globe mounted. Pins:", stories.length);
+    return globe;
+  }
