@@ -2,6 +2,8 @@
 import Globe from "globe.gl";
 import * as THREE from "three";
 
+console.log("SIGN GLOBE BUILD:", "2026-01-21 pin-3d-green-v1");
+
 /**
  * Reads your Google Sheet (published to web).
  * Expected headers (case-insensitive):
@@ -89,32 +91,55 @@ function makePanel(container) {
   panel.dataset.sgPanel = "1";
 
   panel.style.cssText = `
-    position:absolute; right:16px; top:16px; width:min(420px, 92%);
-    max-height:80%; overflow:auto; background:#fff; border-radius:12px;
-    box-shadow:0 8px 24px rgba(0,0,0,.18); padding:14px;
-    display:none; z-index:999999;
-    font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
-    pointer-events:auto;
-  `;
+  position:absolute;
+  right:16px;
+  top:16px;
+  width:min(420px, 92%);
+  max-height:80vh;            /* viewport-based */
+  background:#fff;
+  border-radius:12px;
+  box-shadow:0 8px 24px rgba(0,0,0,.18);
+  padding:14px;
+  display:none;
+  z-index:999999;
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+  pointer-events:auto;
+  overflow:hidden;            /* prevent clipping */
+`;
 
-  panel.innerHTML = `
-    <div style="display:flex; justify-content:space-between; gap:12px; align-items:flex-start;">
-      <div>
-        <div id="sg-title" style="font-weight:700;font-size:16px;"></div>
-        <div id="sg-meta" style="opacity:.7;font-size:13px; margin-top:2px;"></div>
-      </div>
-      <button id="sg-close" style="cursor:pointer;">×</button>
-    </div>
 
-    <div id="sg-image" style="margin-top:10px;display:none;">
-      <img id="sg-img" style="width:100%;max-height:240px;object-fit:cover;border-radius:10px;display:block;" />
+panel.innerHTML = `
+  <div style="display:flex; justify-content:space-between; gap:12px; align-items:flex-start;">
+    <div>
+      <div id="sg-title" style="font-weight:700;font-size:16px;"></div>
+      <div id="sg-meta" style="opacity:.7;font-size:13px; margin-top:2px;"></div>
     </div>
+    <button id="sg-close" style="cursor:pointer;">×</button>
+  </div>
 
-    <div id="sg-body" style="margin-top:10px; line-height:1.45;"></div>
-    <div style="margin-top:10px;">
-      <a id="sg-src" href="#" target="_blank" rel="noopener" style="display:none;">Read on SIGN</a>
-    </div>
-  `;
+  <div id="sg-image" style="margin-top:10px;display:none;">
+    <img
+      id="sg-img"
+      style="width:100%;height:auto;max-height:28vh;object-fit:contain;border-radius:10px;display:block;background:#f3f3f3;"
+    />
+  </div>
+
+  <div
+    id="sg-body"
+    style="
+      margin-top:10px;
+      line-height:1.45;
+      max-height:35vh;
+      overflow-y:auto;
+      padding-right:6px;
+    "
+  ></div>
+
+  <div style="margin-top:10px;">
+    <a id="sg-src" href="#" target="_blank" rel="noopener" style="display:none;">Read on SIGN</a>
+  </div>
+`;
+
 
   container.appendChild(panel);
 
@@ -134,6 +159,9 @@ function makePanel(container) {
 
       if (story.image_url) {
         imgEl.src = story.image_url;
+        imgEl.onload = () => {
+          console.log("IMAGE PIXELS:", imgEl.naturalWidth, "x", imgEl.naturalHeight);
+        };        
         imgWrap.style.display = "block";
       } else {
         imgEl.src = "";
@@ -312,6 +340,84 @@ function makeRedDotSprite() {
   return sprite;
 }
 
+const SIGN_GREEN = "#81BC41";
+
+function make3DPin({ height = 0.35, radius = 0.06, headRadius = 0.10 } = {}) {
+  const group = new THREE.Group();
+
+  // shaft (peg)
+  const shaftGeo = new THREE.CylinderGeometry(radius, radius, height, 12);
+  const mat = new THREE.MeshStandardMaterial({
+    color: SIGN_GREEN,
+    roughness: 0.35,
+    metalness: 0.05,
+  });
+  const shaft = new THREE.Mesh(shaftGeo, mat);
+  shaft.position.y = height / 2; // base at y=0
+  group.add(shaft);
+
+  // head (slightly larger sphere)
+  const headGeo = new THREE.SphereGeometry(headRadius, 16, 16);
+  const head = new THREE.Mesh(headGeo, mat);
+  head.position.y = height + headRadius * 0.75;
+  group.add(head);
+
+  // optional white center dot on the head (billboard-ish)
+  const dotGeo = new THREE.CircleGeometry(headRadius * 0.45, 24);
+  const dotMat = new THREE.MeshBasicMaterial({ color: "#ffffff" });
+  const dot = new THREE.Mesh(dotGeo, dotMat);
+  dot.position.y = height + headRadius * 0.75;
+  dot.position.z = headRadius * 0.98; // sit on front of sphere
+  group.add(dot);
+
+  // IMPORTANT: make sure each clone has its own material reference for raycasting
+  group.traverse((o) => {
+    o.castShadow = false;
+    o.receiveShadow = false;
+  });
+  group.position.y = -0.05; // pushes peg into the globe a bit
+  return group;
+}
+
+function jitterDuplicatesByLatLng(stories, jitterDeg = 0.10) {
+  const map = new Map();
+
+  for (const s of stories) {
+    const key = `${s.pin_lat.toFixed(5)},${s.pin_lon.toFixed(5)}`;
+    if (!map.has(key)) map.set(key, []);
+    map.get(key).push(s);
+  }
+
+  const out = [];
+
+  for (const arr of map.values()) {
+    if (arr.length === 1) {
+      out.push(arr[0]);
+      continue;
+    }
+
+    const baseLat = arr[0].pin_lat;
+    const baseLon = arr[0].pin_lon;
+    const n = arr.length;
+
+    arr.forEach((s, i) => {
+      const angle = (i / n) * Math.PI * 2;
+      const dLat = jitterDeg * Math.cos(angle);
+      const dLon =
+        (jitterDeg * Math.sin(angle)) /
+        Math.max(0.2, Math.cos((baseLat * Math.PI) / 180));
+
+      out.push({
+        ...s,
+        pin_lat: baseLat + dLat,
+        pin_lon: baseLon + dLon,
+      });
+    });
+  }
+
+  return out;
+}
+
 export async function mountSignGlobe({ containerId = "sign-globe", height = 650 } = {}) {
   const container = document.getElementById(containerId);
   if (!container) throw new Error(`Missing #${containerId}`);
@@ -345,28 +451,30 @@ export async function mountSignGlobe({ containerId = "sign-globe", height = 650 
   controls.autoRotateSpeed = 0.001;
 
   globe.scene().add(new THREE.AmbientLight(0xffffff, 0.9));
+  globe.scene().add(new THREE.DirectionalLight(0xffffff, 0.9));
 
   const panel = makePanel(container);
 
   // drag fix
   disableBlockingOverlays(container);
 
-  const stories = await loadStoriesFromGoogleSheet();
+  const storiesRaw = await loadStoriesFromGoogleSheet();
+  const stories = jitterDuplicatesByLatLng(storiesRaw, 0.10);
+  
 
-  // Choose ONE pin style:
-  const pinTemplate = makeGooglePinSprite(); // teardrop + white dot
-  // const pinTemplate = makeRedDotSprite(); // round dot + white dot
+  const pinTemplate = make3DPin();
 
   globe
     .objectsData(stories)
     .objectLat((d) => d.pin_lat)
     .objectLng((d) => d.pin_lon)
-    .objectAltitude(0.5)
-    .objectThreeObject(() => pinTemplate.clone())
+    .objectAltitude(0.01)
+    .objectThreeObject(() => pinTemplate.clone(true))
     .onObjectClick((d) => {
       console.log("PIN CLICK", d.id);
       panel.open(d);
-    });
+  });
+
 
   console.log("Globe mounted. Pins:", stories.length);
   return globe;
