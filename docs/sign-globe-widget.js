@@ -5143,4 +5143,23 @@ In order to be iterable, non-array objects must have a [Symbol.iterator]() metho
     <div style="margin-top:10px;">
       <a id="sg-src" href="#" target="_blank" rel="noopener" style="display:none;">Read on SIGN</a>
     </div>
-  `,i.appendChild(e);const t=e.querySelector("#sg-title"),n=e.querySelector("#sg-meta"),r=e.querySelector("#sg-body"),s=e.querySelector("#sg-image"),o=e.querySelector("#sg-img"),a=e.querySelector("#sg-src");return e.querySelector("#sg-close").onclick=()=>{e.style.display="none"},{open(l){t.textContent=l.title||"",n.textContent=l.country||"",l.image_url?(o.src=l.image_url,s.style.display="block"):(o.src="",s.style.display="none"),r.innerHTML=l.story_html||"",l.source_url?(a.href=l.source_url,a.style.display="inline"):a.style.display="none",e.style.display="block"}}}function Woe(i){let e=0;const t=()=>{e+=1;const n=i.querySelector("canvas");n&&(n.style.pointerEvents="auto",n.style.zIndex="0"),Array.from(i.querySelectorAll("div")).filter(s=>getComputedStyle(s).position==="absolute").forEach(s=>{s.style.pointerEvents="auto"}),e<10&&requestAnimationFrame(t)};requestAnimationFrame(t)}async function $oe({containerId:i="sign-globe",height:e=650}={}){const t=document.getElementById(i);if(!t)throw new Error(`Missing #${i}`);t.style.position="relative",t.style.height=typeof e=="number"?`${e}px`:e;const n=zoe()(t).globeImageUrl("https://unpkg.com/three-globe/example/img/earth-blue-marble.jpg").backgroundColor("rgba(0,0,0,0)");Woe(t);const r=Hoe(t),a=(await(await fetch("./stories.json",{cache:"no-store"})).json()).stories||[];return n.pointsData(a).pointLat(l=>l.pin_lat).pointLng(l=>l.pin_lon).pointRadius(.6).pointAltitude(.02).pointColor(()=>"#d32f2f").onPointClick(l=>{console.log("POINT CLICK",l.id),r.open(l),n.pointOfView({lat:l.pin_lat,lng:l.pin_lon,altitude:1.4},800)}),n}window.SignGlobe={mount:i=>$oe(i)}})();
+  `,i.appendChild(e);const t=e.querySelector("#sg-title"),n=e.querySelector("#sg-meta"),r=e.querySelector("#sg-body"),s=e.querySelector("#sg-image"),o=e.querySelector("#sg-img"),a=e.querySelector("#sg-src");return e.querySelector("#sg-close").onclick=()=>{e.style.display="none"},{open(l){t.textContent=l.title||"",n.textContent=l.country||"",l.image_url?(o.src=l.image_url,s.style.display="block"):(o.src="",s.style.display="none"),r.innerHTML=l.story_html||"",l.source_url?(a.href=l.source_url,a.style.display="inline"):a.style.display="none",e.style.display="block"}}}function Woe(i){let e=0;const t=()=>{e+=1;const n=i.querySelector("canvas");n&&(n.style.pointerEvents="auto",n.style.zIndex="0"),Array.from(i.querySelectorAll("div")).filter(s=>getComputedStyle(s).position==="absolute").forEach(s=>{s.style.pointerEvents="auto"}),e<10&&requestAnimationFrame(t)};requestAnimationFrame(t)}async function $oe({containerId:i="sign-globe",height:e=650}={}){const t=document.getElementById(i);if(!t)throw new Error(`Missing #${i}`);t.style.position="relative",t.style.height=typeof e=="number"?`${e}px`:e;const n=zoe()(t).globeImageUrl("https://unpkg.com/three-globe/example/img/earth-blue-marble.jpg").backgroundColor("rgba(0,0,0,0)");Woe(t);const r=Hoe(t),a=(await(await fetch("./stories.json",{cache:"no-store"})).json()).stories||[];return n.htmlElementsData(a).htmlLat(l=>l.pin_lat).htmlLng(l=>l.pin_lon).htmlElement(l=>{const u=document.createElement("div");u.style.cssText=`
+        width:22px;
+        height:22px;
+        background:#d32f2f;
+        border-radius:50% 50% 50% 0;
+        transform:rotate(-45deg);
+        cursor:pointer;
+        position:relative;
+        z-index:99999;
+        pointer-events:auto;
+        box-shadow: 0 3px 6px rgba(0,0,0,0.4);
+      `;const A=document.createElement("div");return A.style.cssText=`
+        width:10px;
+        height:10px;
+        background:white;
+        border-radius:50%;
+        position:absolute;
+        top:6px;
+        left:6px;
+      `,u.appendChild(A),u.title=l.pin_label||l.title||"",u.addEventListener("click",p=>{p.preventDefault(),p.stopPropagation(),console.log("PIN CLICK",l.id),r.open(l)}),u}),n}window.SignGlobe={mount:i=>$oe(i)}})();
