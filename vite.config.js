@@ -11,7 +11,7 @@ export default defineConfig({
       entry: "src/embed.js",
       name: "SignGlobe",
       formats: ["iife"],
-      fileName: () => "sign-globe-widget.js",
-    },
-  },
+      fileName: () => "sign-globe-widget.js"
+    }
+  }
 });
