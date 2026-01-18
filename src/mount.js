@@ -141,6 +141,7 @@ panel.innerHTML = `
 `;
 
 
+
   container.appendChild(panel);
 
   const titleEl = panel.querySelector("#sg-title");
