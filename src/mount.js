@@ -311,7 +311,7 @@ export async function mountSignGlobe({ containerId = "sign-globe", height = 650 
   .objectsData(stories)
   .objectLat(d => d.pin_lat)
   .objectLng(d => d.pin_lon)
-  .objectAltitude(0.1) // visible above surface
+  .objectAltitude(0.5) // visible above surface
   .objectThreeObject(() => {
     // simple visible marker (safe)
     const texCanvas = document.createElement("canvas");
