@@ -1,3 +1,4 @@
+// src/mount.js
 import Globe from "globe.gl";
 import * as THREE from "three";
 
@@ -24,6 +25,7 @@ async function loadStoriesFromGoogleSheet() {
   }
 
   const json = JSON.parse(text.slice(start, end + 1));
+
   const colsRaw = (json.table.cols || []).map((c) => (c.label ?? ""));
   const cols = colsRaw.map((s) => s.trim().toLowerCase());
   const rows = json.table.rows || [];
@@ -46,8 +48,8 @@ async function loadStoriesFromGoogleSheet() {
 
   const stories = raw
     .map((d) => {
-      const latRaw = get(d, "pin_lat", "pin lat", "lat", "latitude");
-      const lonRaw = get(d, "pin_lon", "pin lon", "lon", "lng", "longitude");
+      const latRaw = get(d, "pin_lat", "pin_lat (num)", "pin lat", "lat", "latitude");
+      const lonRaw = get(d, "pin_lon", "pin_lon (num)", "pin lon", "lon", "lng", "longitude");
 
       return {
         id: String(get(d, "id") ?? ""),
@@ -65,11 +67,15 @@ async function loadStoriesFromGoogleSheet() {
 
   console.log("Sheet headers:", colsRaw);
   console.log("Rows fetched:", raw.length, "Valid pins:", stories.length);
+  if (stories.length) console.log("Example story:", stories[0]);
+
   return stories;
 }
 
 function makePanel(container) {
   const panel = document.createElement("div");
+  panel.dataset.sgPanel = "1"; // ✅ so we don't disable pointer events on it
+
   panel.style.cssText = `
     position:absolute; right:16px; top:16px; width:min(420px, 92%);
     max-height:80%; overflow:auto; background:#fff; border-radius:12px;
@@ -136,7 +142,46 @@ function makePanel(container) {
   };
 }
 
-// Create a simple 3D “pin”: sphere head + cone body
+/**
+ * Your console proved a blocking overlay DIV is sitting above the canvas.
+ * This removes pointer events from absolute overlays so drag reaches the canvas.
+ * We keep the story panel clickable.
+ */
+function disableBlockingOverlays(container) {
+  let tries = 0;
+
+  const tick = () => {
+    tries++;
+
+    // Ensure canvas can receive drag events
+    const canvas = container.querySelector("canvas");
+    if (canvas) {
+      canvas.style.pointerEvents = "auto";
+      canvas.style.touchAction = "none";
+      canvas.style.cursor = "grab";
+    }
+
+    // Disable pointer events on absolute overlays (except panel)
+    const overlays = Array.from(container.querySelectorAll("div")).filter((el) => {
+      if (el.dataset.sgPanel === "1") return false;
+      const cs = getComputedStyle(el);
+      return cs.position === "absolute";
+    });
+
+    overlays.forEach((el) => {
+      el.style.pointerEvents = "none";
+    });
+
+    // Keep panel clickable
+    const panel = container.querySelector('[data-sg-panel="1"]');
+    if (panel) panel.style.pointerEvents = "auto";
+
+    if (tries < 40) requestAnimationFrame(tick);
+  };
+
+  requestAnimationFrame(tick);
+}
+
 function makePinMesh() {
   const group = new THREE.Group();
 
@@ -163,12 +208,25 @@ export async function mountSignGlobe({ containerId = "sign-globe", height = 650 
   container.style.position = "relative";
   container.style.height = typeof height === "number" ? `${height}px` : height;
   container.style.width = "100%";
+  container.style.touchAction = "none";
+
+  // Prevent page scroll/trackpad gestures from stealing drag
+  container.addEventListener(
+    "wheel",
+    (e) => e.preventDefault(),
+    { passive: false }
+  );
 
   const globe = Globe()(container)
     .globeImageUrl("https://unpkg.com/three-globe/example/img/earth-blue-marble.jpg")
     .backgroundColor("rgba(0,0,0,0)");
 
-  // Make it draggable
+  // Enable pointer interaction (raycasting/clicks)
+  if (typeof globe.enablePointerInteraction === "function") {
+    globe.enablePointerInteraction(true);
+  }
+
+  // Controls: explicitly enabled
   const controls = globe.controls();
   controls.enabled = true;
   controls.enableRotate = true;
@@ -176,19 +234,24 @@ export async function mountSignGlobe({ containerId = "sign-globe", height = 650 
   controls.enablePan = false;
   controls.enableDamping = true;
   controls.dampingFactor = 0.08;
+
+  // Auto-rotate (still draggable)
   controls.autoRotate = true;
   controls.autoRotateSpeed = 0.5;
 
-  // Lighting (so the pin meshes look good)
+  // Lighting for pins
   globe.scene().add(new THREE.AmbientLight(0xffffff, 0.9));
   const dir = new THREE.DirectionalLight(0xffffff, 0.8);
   dir.position.set(1, 1, 1);
   globe.scene().add(dir);
 
   const panel = makePanel(container);
+
+  // ✅ critical fix for dragging
+  disableBlockingOverlays(container);
+
   const stories = await loadStoriesFromGoogleSheet();
 
-  // ✅ 3D pins (no DOM overlays to block dragging)
   globe
     .objectsData(stories)
     .objectLat((d) => d.pin_lat)
