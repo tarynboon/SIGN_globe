@@ -49,6 +49,7 @@ async function loadStoriesFromGoogleSheet() {
     .map((d) => {
       const latRaw = get(d, "pin_lat", "pin_lat (num)", "pin lat", "lat", "latitude");
       const lonRaw = get(d, "pin_lon", "pin_lon (num)", "pin lon", "lon", "lng", "longitude");
+
       return {
         id: String(get(d, "id") ?? ""),
         pin_lat: Number(latRaw),
@@ -65,6 +66,8 @@ async function loadStoriesFromGoogleSheet() {
 
   console.log("Sheet headers:", colsRaw);
   console.log("Rows fetched:", raw.length, "Valid pins:", stories.length);
+  if (stories.length) console.log("Example story:", stories[0]);
+
   return stories;
 }
 
@@ -138,7 +141,8 @@ function makePanel(container) {
   };
 }
 
-// Your drag fix: disable pointer events on blocking absolute overlays
+// Prevent a blocking absolute overlay div from stealing drag events.
+// Keep the panel clickable.
 function disableBlockingOverlays(container) {
   let tries = 0;
   const tick = () => {
@@ -169,9 +173,14 @@ function disableBlockingOverlays(container) {
   requestAnimationFrame(tick);
 }
 
-// Draw a “cartoon pin” to a canvas texture (guaranteed visible as a sprite)
-function makePinTexture() {
-  const size = 128;
+// Draw a Google-Maps-ish pin to a canvas and use it as a THREE sprite texture.
+// Sprites stay visible and don't get occluded by the globe surface.
+function makeGooglePinTexture({
+  size = 256,
+  fill = "#EA4335", // Google-ish red
+  stroke = "rgba(0,0,0,0.35)",
+  strokeWidth = 10,
+} = {}) {
   const canvas = document.createElement("canvas");
   canvas.width = size;
   canvas.height = size;
@@ -179,32 +188,74 @@ function makePinTexture() {
   const ctx = canvas.getContext("2d");
   if (!ctx) throw new Error("Canvas 2D context not available");
 
-  // background transparent
+  const cx = size / 2;
+  const headY = size * 0.40;
+  const headR = size * 0.22;
+  const tipY = size * 0.92;
+
   ctx.clearRect(0, 0, size, size);
 
-  // pin color
-  const red = "#d32f2f";
+  // shadow
+  ctx.save();
+  ctx.shadowColor = "rgba(0,0,0,0.35)";
+  ctx.shadowBlur = size * 0.05;
+  ctx.shadowOffsetY = size * 0.03;
 
-  // draw teardrop pin (circle + triangle)
-  ctx.fillStyle = red;
+  // shape path (smooth teardrop)
+  const path = new Path2D();
+  path.arc(cx, headY, headR, Math.PI * 0.15, Math.PI * 0.85, true);
 
-  // circle head
+  // Two bezier curves down to a point, then back up
+  path.bezierCurveTo(
+    cx - headR * 1.15, headY + headR * 0.95,
+    cx - headR * 0.35, headY + headR * 2.05,
+    cx, tipY
+  );
+  path.bezierCurveTo(
+    cx + headR * 0.35, headY + headR * 2.05,
+    cx + headR * 1.15, headY + headR * 0.95,
+    cx + headR * 0.98, headY + headR * 0.10
+  );
+  path.closePath();
+
+  // fill
+  ctx.fillStyle = fill;
+  ctx.fill(path);
+
+  // outline
+  ctx.lineWidth = strokeWidth;
+  ctx.strokeStyle = stroke;
+  ctx.lineJoin = "round";
+  ctx.lineCap = "round";
+  ctx.stroke(path);
+
+  ctx.restore();
+
+  // inner circle (white)
+  ctx.fillStyle = "#fff";
   ctx.beginPath();
-  ctx.arc(size / 2, size * 0.42, size * 0.22, 0, Math.PI * 2);
+  ctx.arc(cx, headY, headR * 0.45, 0, Math.PI * 2);
   ctx.fill();
 
-  // triangle body
+  // subtle inner shadow dot
+  ctx.strokeStyle = "rgba(0,0,0,0.10)";
+  ctx.lineWidth = Math.max(2, size * 0.01);
   ctx.beginPath();
-  ctx.moveTo(size / 2, size * 0.92);
-  ctx.lineTo(size * 0.36, size * 0.52);
-  ctx.lineTo(size * 0.64, size * 0.52);
-  ctx.closePath();
-  ctx.fill();
+  ctx.arc(cx, headY, headR * 0.45, 0, Math.PI * 2);
+  ctx.stroke();
 
-  // white inner dot
-  ctx.fillStyle = "#ffffff";
+  // glossy highlight (top-left)
+  ctx.fillStyle = "rgba(255,255,255,0.22)";
   ctx.beginPath();
-  ctx.arc(size / 2, size * 0.42, size * 0.10, 0, Math.PI * 2);
+  ctx.ellipse(
+    cx - headR * 0.32,
+    headY - headR * 0.35,
+    headR * 0.55,
+    headR * 0.35,
+    -0.35,
+    0,
+    Math.PI * 2
+  );
   ctx.fill();
 
   const tex = new THREE.CanvasTexture(canvas);
@@ -212,21 +263,21 @@ function makePinTexture() {
   return tex;
 }
 
-function makePinSprite() {
-  const texture = makePinTexture();
+function makeGooglePinSprite() {
+  const texture = makeGooglePinTexture();
   const material = new THREE.SpriteMaterial({
     map: texture,
     transparent: true,
-    depthTest: false, // ✅ don't get buried/occluded by the globe
-    depthWrite: false
+    depthTest: false,  // ✅ keep visible even near horizon
+    depthWrite: false,
   });
 
   const sprite = new THREE.Sprite(material);
 
-  // Size in world units (tune if you want bigger/smaller)
-  sprite.scale.set(1.8, 1.8, 1);
+  // Big, readable pin size
+  sprite.scale.set(3.4, 3.4, 1);
 
-  // Render above most things
+  // Make sure they draw on top
   sprite.renderOrder = 999;
 
   return sprite;
@@ -241,7 +292,7 @@ export async function mountSignGlobe({ containerId = "sign-globe", height = 650 
   container.style.width = "100%";
   container.style.touchAction = "none";
 
-  // Prevent page scroll gestures from stealing drag
+  // Prevent scroll/trackpad gestures from stealing drag when over the globe
   container.addEventListener("wheel", (e) => e.preventDefault(), { passive: false });
 
   const globe = Globe()(container)
@@ -252,6 +303,7 @@ export async function mountSignGlobe({ containerId = "sign-globe", height = 650 
     globe.enablePointerInteraction(true);
   }
 
+  // Controls
   const controls = globe.controls();
   controls.enabled = true;
   controls.enableRotate = true;
@@ -259,13 +311,17 @@ export async function mountSignGlobe({ containerId = "sign-globe", height = 650 
   controls.enablePan = false;
   controls.enableDamping = true;
   controls.dampingFactor = 0.08;
+
+  // Optional auto-rotate (still draggable)
   controls.autoRotate = true;
   controls.autoRotateSpeed = 0.5;
 
-  // Light (not strictly needed for sprites, but fine)
+  // Simple ambient light (sprites don't need it, but harmless)
   globe.scene().add(new THREE.AmbientLight(0xffffff, 0.9));
 
   const panel = makePanel(container);
+
+  // ✅ drag fix
   disableBlockingOverlays(container);
 
   const stories = await loadStoriesFromGoogleSheet();
@@ -274,8 +330,8 @@ export async function mountSignGlobe({ containerId = "sign-globe", height = 650 
     .objectsData(stories)
     .objectLat((d) => d.pin_lat)
     .objectLng((d) => d.pin_lon)
-    .objectAltitude(0.08) // ✅ lift above surface
-    .objectThreeObject(() => makePinSprite())
+    .objectAltitude(0.10) // lifted above surface
+    .objectThreeObject(() => makeGooglePinSprite())
     .onObjectClick((d) => {
       console.log("PIN CLICK", d.id);
       panel.open(d);
