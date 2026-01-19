@@ -249,9 +249,25 @@ function makeGooglePinSprite() {
   const material = new THREE.SpriteMaterial({
     map: texture,
     transparent: true,
-    depthTest: false, // always visible
+
+    // Make them behave like they're on the globe surface (occlude behind the globe)
+    depthTest: true,
     depthWrite: false,
   });
+
+  const sprite = new THREE.Sprite(material);
+
+  // ✅ Big + easy to click (~1 cm-ish)
+  sprite.scale.set(4.2, 4.2, 1);
+
+  // ✅ Anchor the sprite at the TIP of the pin:
+  // (0.5 = centered horizontally, ~0.93–0.98 near bottom)
+  sprite.center.set(0.5, 0.95);
+
+  sprite.renderOrder = 999;
+  return sprite;
+}
+
 
   const sprite = new THREE.Sprite(material);
 
@@ -293,7 +309,7 @@ export async function mountSignGlobe({ containerId = "sign-globe", height = 650 
 
   // Optional auto-rotate (still draggable)
   controls.autoRotate = true;
-  controls.autoRotateSpeed = 0.5;
+  controls.autoRotateSpeed = 0.12;
 
   globe.scene().add(new THREE.AmbientLight(0xffffff, 0.9));
 
