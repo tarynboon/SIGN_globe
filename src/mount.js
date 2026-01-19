@@ -309,7 +309,7 @@ export async function mountSignGlobe({ containerId = "sign-globe", height = 650 
 
   // Optional auto-rotate (still draggable)
   controls.autoRotate = true;
-  controls.autoRotateSpeed = 0.12;
+  controls.autoRotateSpeed = 0.05;
 
   globe.scene().add(new THREE.AmbientLight(0xffffff, 0.9));
 
@@ -324,7 +324,7 @@ export async function mountSignGlobe({ containerId = "sign-globe", height = 650 
     .objectsData(stories)
     .objectLat((d) => d.pin_lat)
     .objectLng((d) => d.pin_lon)
-    .objectAltitude(0.12)
+    .objectAltitude(0.01)
     .objectThreeObject(() => makeGooglePinSprite())
     .onObjectClick((d) => {
       console.log("PIN CLICK", d.id);
