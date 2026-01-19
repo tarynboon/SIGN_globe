@@ -2,6 +2,11 @@
 import Globe from "globe.gl";
 import * as THREE from "three";
 
+/**
+ * Reads your Google Sheet (published to web).
+ * Expected headers (case-insensitive):
+ * id, pin_lat, pin_lon, pin_label, title, country, story_html, image_url, source_url
+ */
 async function loadStoriesFromGoogleSheet() {
   const SHEET_ID = "1poB9Dj7m8dFoiVCtjd9BSzp1dqNVTclAakET4ARwVGE";
   const SHEET_NAME = "Stories";
@@ -25,6 +30,7 @@ async function loadStoriesFromGoogleSheet() {
   }
 
   const json = JSON.parse(text.slice(start, end + 1));
+
   const colsRaw = (json.table.cols || []).map((c) => (c.label ?? ""));
   const cols = colsRaw.map((s) => s.trim().toLowerCase());
   const rows = json.table.rows || [];
@@ -45,6 +51,13 @@ async function loadStoriesFromGoogleSheet() {
     return null;
   };
 
+  const toNum = (v) => {
+    // tolerate "47,6062" / "47.6062 " / etc.
+    const s = String(v ?? "").replace(/,/g, "").trim();
+    const n = parseFloat(s);
+    return Number.isFinite(n) ? n : NaN;
+  };
+
   const stories = raw
     .map((d) => {
       const latRaw = get(d, "pin_lat", "pin_lat (num)", "pin lat", "lat", "latitude");
@@ -52,8 +65,8 @@ async function loadStoriesFromGoogleSheet() {
 
       return {
         id: String(get(d, "id") ?? ""),
-        pin_lat: Number(latRaw),
-        pin_lon: Number(lonRaw),
+        pin_lat: toNum(latRaw),
+        pin_lon: toNum(lonRaw),
         pin_label: String(get(d, "pin_label", "pin label") ?? ""),
         title: String(get(d, "title") ?? ""),
         country: String(get(d, "country") ?? ""),
@@ -176,9 +189,9 @@ function disableBlockingOverlays(container) {
 // Google-Maps style teardrop pin (canvas texture) -> THREE sprite
 function makeGooglePinTexture({
   w = 512,
-  h = 768,                 // ✅ taller so you see the point
-  fill = "#ff4d4d",
-  stroke = "#d93636",
+  h = 768,
+  fill = "#d32f2f",
+  stroke = "#b71c1c",
   strokeWidth = 34,
 } = {}) {
   const canvas = document.createElement("canvas");
@@ -190,9 +203,9 @@ function makeGooglePinTexture({
   ctx.clearRect(0, 0, w, h);
 
   const cx = w / 2;
-  const cy = h * 0.33;     // top circle center
-  const r = w * 0.22;      // circle radius
-  const tipY = h * 0.93;   // tip near bottom
+  const cy = h * 0.33;
+  const r = w * 0.22;
+  const tipY = h * 0.93;
 
   // shadow
   ctx.save();
@@ -205,7 +218,7 @@ function makeGooglePinTexture({
   // full circle head
   path.arc(cx, cy, r, 0, Math.PI * 2);
 
-  // smooth “shoulders” down into the point
+  // smooth shoulders -> point
   path.moveTo(cx - r * 0.95, cy + r * 0.10);
   path.bezierCurveTo(
     cx - r * 1.35, cy + r * 1.05,
@@ -219,7 +232,6 @@ function makeGooglePinTexture({
   );
   path.closePath();
 
-  // fill + outline
   ctx.fillStyle = fill;
   ctx.fill(path);
 
@@ -231,8 +243,8 @@ function makeGooglePinTexture({
 
   ctx.restore();
 
-  // inner dark dot
-  ctx.fillStyle = "#7a0000";
+  // inner WHITE dot
+  ctx.fillStyle = "#ffffff";
   ctx.beginPath();
   ctx.arc(cx, cy, r * 0.42, 0, Math.PI * 2);
   ctx.fill();
@@ -248,21 +260,57 @@ function makeGooglePinSprite() {
   const material = new THREE.SpriteMaterial({
     map: texture,
     transparent: true,
-    depthTest: true,     // ✅ hides behind globe when on far side
+    depthTest: true,
     depthWrite: false,
   });
 
   const sprite = new THREE.Sprite(material);
 
-  // ✅ BIG (increase if you want even bigger)
-  sprite.scale.set(7.0, 10.5, 1); // tall aspect ratio matches texture
+  // size on globe
+  sprite.scale.set(7.0, 10.5, 1);
 
-  // ✅ Anchor at tip so point touches the globe
+  // anchor at tip so point touches globe
   sprite.center.set(0.5, 0.98);
 
   return sprite;
 }
 
+// (Alternative) simple round red dot + white dot.
+// If you prefer this style, swap to makeRedDotSprite() below.
+function makeRedDotSprite() {
+  const size = 128;
+  const canvas = document.createElement("canvas");
+  canvas.width = size;
+  canvas.height = size;
+
+  const ctx = canvas.getContext("2d");
+  ctx.clearRect(0, 0, size, size);
+
+  ctx.fillStyle = "#d32f2f";
+  ctx.beginPath();
+  ctx.arc(size / 2, size / 2, 46, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.fillStyle = "#ffffff";
+  ctx.beginPath();
+  ctx.arc(size / 2, size / 2, 16, 0, Math.PI * 2);
+  ctx.fill();
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.needsUpdate = true;
+
+  const material = new THREE.SpriteMaterial({
+    map: texture,
+    transparent: true,
+    depthTest: true,
+    depthWrite: false,
+  });
+
+  const sprite = new THREE.Sprite(material);
+  sprite.scale.set(5.5, 5.5, 1);
+  sprite.center.set(0.5, 0.5);
+  return sprite;
+}
 
 export async function mountSignGlobe({ containerId = "sign-globe", height = 650 } = {}) {
   const container = document.getElementById(containerId);
@@ -284,7 +332,6 @@ export async function mountSignGlobe({ containerId = "sign-globe", height = 650 
     globe.enablePointerInteraction(true);
   }
 
-  // Controls
   const controls = globe.controls();
   controls.enabled = true;
   controls.enableRotate = true;
@@ -301,57 +348,26 @@ export async function mountSignGlobe({ containerId = "sign-globe", height = 650 
 
   const panel = makePanel(container);
 
-  // ✅ drag fix
+  // drag fix
   disableBlockingOverlays(container);
 
   const stories = await loadStoriesFromGoogleSheet();
-  // after: const stories = await loadStoriesFromGoogleSheet();
+
+  // Choose ONE pin style:
+  const pinTemplate = makeGooglePinSprite(); // teardrop + white dot
+  // const pinTemplate = makeRedDotSprite(); // round dot + white dot
 
   globe
-  .objectsData(stories)
-  .objectLat(d => d.pin_lat)
-  .objectLng(d => d.pin_lon)
-  .objectAltitude(0.5) // visible above surface
-  .objectThreeObject(() => {
-    // simple visible marker (safe)
-    const texCanvas = document.createElement("canvas");
-    texCanvas.width = 128;
-    texCanvas.height = 128;
-    const ctx = texCanvas.getContext("2d");
+    .objectsData(stories)
+    .objectLat((d) => d.pin_lat)
+    .objectLng((d) => d.pin_lon)
+    .objectAltitude(0.5)
+    .objectThreeObject(() => pinTemplate.clone())
+    .onObjectClick((d) => {
+      console.log("PIN CLICK", d.id);
+      panel.open(d);
+    });
 
-    // red circle + white dot
-    ctx.clearRect(0, 0, 128, 128);
-    ctx.fillStyle = "#ff4d4d";
-    ctx.beginPath();
-    ctx.arc(64, 64, 44, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = "#ffffff";
-    ctx.beginPath();
-    ctx.arc(64, 64, 18, 0, Math.PI * 2);
-    ctx.fill();
-
-    const texture = new THREE.CanvasTexture(texCanvas);
-
-    const sprite = new THREE.Sprite(
-      new THREE.SpriteMaterial({
-        map: texture,
-        transparent: true,
-        depthTest: true,
-        depthWrite: false,
-      })
-    );
-
-    // big and clickable
-    sprite.scale.set(5.5, 5.5, 1);
-    sprite.center.set(0.5, 0.5);
-
-    return sprite;
-  })
-  .onObjectClick(d => {
-    console.log("PIN CLICK", d.id);
-    panel.open(d);
-  });
-
-    console.log("Globe mounted. Pins:", stories.length);
-    return globe;
-  }
+  console.log("Globe mounted. Pins:", stories.length);
+  return globe;
+}
