@@ -264,6 +264,7 @@ function makeGooglePinSprite() {
 }
 
 
+
 export async function mountSignGlobe({ containerId = "sign-globe", height = 650 } = {}) {
   const container = document.getElementById(containerId);
   if (!container) throw new Error(`Missing #${containerId}`);
