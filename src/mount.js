@@ -177,9 +177,9 @@ function disableBlockingOverlays(container) {
 // Sprites stay visible and don't get occluded by the globe surface.
 function makeGooglePinTexture({
   size = 256,
-  fill = "#EA4335", // Google-ish red
-  stroke = "rgba(0,0,0,0.35)",
-  strokeWidth = 10,
+  fill = "#EA4335",
+  stroke = "rgba(0,0,0,0.45)",
+  strokeWidth = 14,
 } = {}) {
   const canvas = document.createElement("canvas");
   canvas.width = size;
@@ -188,74 +188,41 @@ function makeGooglePinTexture({
   const ctx = canvas.getContext("2d");
   if (!ctx) throw new Error("Canvas 2D context not available");
 
-  const cx = size / 2;
-  const headY = size * 0.40;
-  const headR = size * 0.22;
-  const tipY = size * 0.92;
-
   ctx.clearRect(0, 0, size, size);
+
+  const cx = size / 2;
+  const cy = size / 2;
+  const r = size * 0.30;
 
   // shadow
   ctx.save();
   ctx.shadowColor = "rgba(0,0,0,0.35)";
-  ctx.shadowBlur = size * 0.05;
-  ctx.shadowOffsetY = size * 0.03;
+  ctx.shadowBlur = size * 0.08;
+  ctx.shadowOffsetY = size * 0.04;
 
-  // shape path (smooth teardrop)
-  const path = new Path2D();
-  path.arc(cx, headY, headR, Math.PI * 0.15, Math.PI * 0.85, true);
-
-  // Two bezier curves down to a point, then back up
-  path.bezierCurveTo(
-    cx - headR * 1.15, headY + headR * 0.95,
-    cx - headR * 0.35, headY + headR * 2.05,
-    cx, tipY
-  );
-  path.bezierCurveTo(
-    cx + headR * 0.35, headY + headR * 2.05,
-    cx + headR * 1.15, headY + headR * 0.95,
-    cx + headR * 0.98, headY + headR * 0.10
-  );
-  path.closePath();
-
-  // fill
+  // main circle
   ctx.fillStyle = fill;
-  ctx.fill(path);
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.fill();
 
   // outline
   ctx.lineWidth = strokeWidth;
   ctx.strokeStyle = stroke;
-  ctx.lineJoin = "round";
-  ctx.lineCap = "round";
-  ctx.stroke(path);
+  ctx.stroke();
 
   ctx.restore();
 
-  // inner circle (white)
-  ctx.fillStyle = "#fff";
+  // white center dot
+  ctx.fillStyle = "#ffffff";
   ctx.beginPath();
-  ctx.arc(cx, headY, headR * 0.45, 0, Math.PI * 2);
+  ctx.arc(cx, cy, r * 0.40, 0, Math.PI * 2);
   ctx.fill();
 
-  // subtle inner shadow dot
-  ctx.strokeStyle = "rgba(0,0,0,0.10)";
-  ctx.lineWidth = Math.max(2, size * 0.01);
-  ctx.beginPath();
-  ctx.arc(cx, headY, headR * 0.45, 0, Math.PI * 2);
-  ctx.stroke();
-
-  // glossy highlight (top-left)
+  // glossy highlight
   ctx.fillStyle = "rgba(255,255,255,0.22)";
   ctx.beginPath();
-  ctx.ellipse(
-    cx - headR * 0.32,
-    headY - headR * 0.35,
-    headR * 0.55,
-    headR * 0.35,
-    -0.35,
-    0,
-    Math.PI * 2
-  );
+  ctx.ellipse(cx - r * 0.35, cy - r * 0.35, r * 0.55, r * 0.35, -0.35, 0, Math.PI * 2);
   ctx.fill();
 
   const tex = new THREE.CanvasTexture(canvas);
@@ -268,16 +235,16 @@ function makeGooglePinSprite() {
   const material = new THREE.SpriteMaterial({
     map: texture,
     transparent: true,
-    depthTest: false,  // ✅ keep visible even near horizon
+    depthTest: false,
     depthWrite: false,
   });
 
   const sprite = new THREE.Sprite(material);
 
-  // Big, readable pin size
-  sprite.scale.set(3.4, 3.4, 1);
+  // ✅ BIG: make it easily visible and clickable
+  sprite.scale.set(5.0, 5.0, 1);
 
-  // Make sure they draw on top
+  // ✅ draw on top
   sprite.renderOrder = 999;
 
   return sprite;
@@ -332,6 +299,7 @@ export async function mountSignGlobe({ containerId = "sign-globe", height = 650 
     .objectLng((d) => d.pin_lon)
     .objectAltitude(0.10) // lifted above surface
     .objectThreeObject(() => makeGooglePinSprite())
+    .objectAltitude(0.12)
     .onObjectClick((d) => {
       console.log("PIN CLICK", d.id);
       panel.open(d);
