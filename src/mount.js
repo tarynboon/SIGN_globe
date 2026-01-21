@@ -236,43 +236,52 @@ function make3DPin({ height = 0.35, radius = 0.06, headRadius = 0.10 } = {}) {
   });
 
   // shaft
-  const shaftGeo = new THREE.CylinderGeometry(radius, radius, height, 12);
-  const shaft = new THREE.Mesh(shaftGeo, mat);
-  shaft.position.y = height / 2; // base at y=0
+  const shaft = new THREE.Mesh(
+    new THREE.CylinderGeometry(radius, radius, height, 12),
+    mat
+  );
+  shaft.position.y = height / 2;
   group.add(shaft);
 
-  // head
-  const headGeo = new THREE.SphereGeometry(headRadius, 16, 16);
-  const head = new THREE.Mesh(headGeo, mat);
-  head.position.y = height + headRadius * 0.75;
-  group.add(head);
-
-  // dark outline shell (helps pop against land)
-  const outlineGeo = new THREE.SphereGeometry(headRadius * 1.08, 16, 16);
-  const outlineMat = new THREE.MeshBasicMaterial({ color: "#2d6a1f" });
-  const outline = new THREE.Mesh(outlineGeo, outlineMat);
-  outline.position.copy(head.position);
+  // outline FIRST (slightly bigger)
+  const outline = new THREE.Mesh(
+    new THREE.SphereGeometry(headRadius * 1.12, 16, 16),
+    new THREE.MeshBasicMaterial({ color: "#2d6a1f" })
+  );
+  outline.position.y = height + headRadius * 0.75;
   group.add(outline);
 
-  // white dot (simple disc)
-  const dotGeo = new THREE.CircleGeometry(headRadius * 0.45, 24);
-  const dotMat = new THREE.MeshBasicMaterial({ color: "#ffffff" });
-  const dot = new THREE.Mesh(dotGeo, dotMat);
+  // head
+  const head = new THREE.Mesh(
+    new THREE.SphereGeometry(headRadius, 16, 16),
+    mat
+  );
+  head.position.copy(outline.position);
+  group.add(head);
+
+  // white dot
+  const dot = new THREE.Mesh(
+    new THREE.CircleGeometry(headRadius * 0.45, 24),
+    new THREE.MeshBasicMaterial({ color: "#ffffff" })
+  );
   dot.position.y = head.position.y;
-  dot.position.z = headRadius * 1.15; // sit in front of head
+  dot.position.z = headRadius * 1.15;
   group.add(dot);
 
-  // push into globe a bit, then SCALE UP so it's visible
+  // BIG invisible click target (so click always works)
+  const click = new THREE.Sprite(
+    new THREE.SpriteMaterial({ transparent: true, opacity: 0 })
+  );
+  click.scale.set(30, 30, 1);
+  click.position.y = head.position.y;
+  group.add(click);
+
   group.position.y = -0.05;
   group.scale.set(85, 85, 85);
 
-  group.traverse((o) => {
-    o.castShadow = false;
-    o.receiveShadow = false;
-  });
-
   return group;
 }
+
 
 /**
  * Invisible sprite click target so onObjectClick always fires reliably.
