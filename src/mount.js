@@ -277,7 +277,7 @@ function make3DPin({ height = 0.35, radius = 0.06, headRadius = 0.10 } = {}) {
   group.add(click);
 
   group.position.y = -0.05;
-  group.scale.set(85, 85, 85);
+  group.scale.set(20,20,20);
 
   return group;
 }
