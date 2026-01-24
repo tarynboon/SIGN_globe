@@ -2,7 +2,7 @@
 import Globe from "globe.gl";
 import * as THREE from "three";
 
-console.log("SIGN GLOBE BUILD:", "2026-01-22 pin-3d-green-v2");
+console.log("SIGN GLOBE BUILD:", "2026-01-22 pin-3d-green-v3");
 
 /**
  * Reads your Google Sheet (published to web).
@@ -220,14 +220,19 @@ function disableBlockingOverlays(container) {
 
 const SIGN_GREEN = "#81BC41";
 
-// 3D pin that "pegs" into the globe
+/**
+ * 3D pin that "pegs" into the globe.
+ * Uses emissive so it stays SIGN green under lighting.
+ */
 function make3DPin({ height = 0.35, radius = 0.06, headRadius = 0.10 } = {}) {
   const group = new THREE.Group();
 
   const mat = new THREE.MeshStandardMaterial({
     color: SIGN_GREEN,
-    roughness: 0.35,
-    metalness: 0.05,
+    emissive: new THREE.Color(SIGN_GREEN),
+    emissiveIntensity: 0.35,
+    roughness: 0.25,
+    metalness: 0.0,
   });
 
   // shaft
@@ -242,22 +247,48 @@ function make3DPin({ height = 0.35, radius = 0.06, headRadius = 0.10 } = {}) {
   head.position.y = height + headRadius * 0.75;
   group.add(head);
 
+  // dark outline shell (helps pop against land)
+  const outlineGeo = new THREE.SphereGeometry(headRadius * 1.08, 16, 16);
+  const outlineMat = new THREE.MeshBasicMaterial({ color: "#2d6a1f" });
+  const outline = new THREE.Mesh(outlineGeo, outlineMat);
+  outline.position.copy(head.position);
+  group.add(outline);
+
   // white dot (simple disc)
   const dotGeo = new THREE.CircleGeometry(headRadius * 0.45, 24);
   const dotMat = new THREE.MeshBasicMaterial({ color: "#ffffff" });
   const dot = new THREE.Mesh(dotGeo, dotMat);
-  dot.position.y = height + headRadius * 0.75;
-  dot.position.z = headRadius * 0.98;
+  dot.position.y = head.position.y;
+  dot.position.z = headRadius * 1.15; // sit in front of head
   group.add(dot);
+
+  // push into globe a bit, then SCALE UP so it's visible
+  group.position.y = -0.05;
+  group.scale.set(85, 85, 85);
 
   group.traverse((o) => {
     o.castShadow = false;
     o.receiveShadow = false;
   });
 
-  // push into globe a bit, then SCALE UP so it's visible
-  group.position.y = -0.05;
-  group.scale.set(60, 60, 60);
+  return group;
+}
+
+/**
+ * Invisible sprite click target so onObjectClick always fires reliably.
+ */
+function addClickTarget(group) {
+  const canvas = document.createElement("canvas");
+  canvas.width = 16;
+  canvas.height = 16;
+
+  const tex = new THREE.CanvasTexture(canvas);
+  const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, opacity: 0 });
+
+  const sprite = new THREE.Sprite(mat);
+  sprite.scale.set(24, 24, 1); // BIG click area
+  sprite.position.y = 14; // near head
+  group.add(sprite);
 
   return group;
 }
@@ -345,16 +376,16 @@ export async function mountSignGlobe({ containerId = "sign-globe", height = 650 
   const pinTemplate = make3DPin();
 
   globe
-    .objectsData(stories)
-    .objectLat((d) => d.pin_lat)
-    .objectLng((d) => d.pin_lon)
-    .objectAltitude(0.01)
-    .objectThreeObjectExtend(true)
-    .objectThreeObject(() => pinTemplate.clone(true))
-    .onObjectClick((d) => {
-      console.log("PIN CLICK", d.id);
-      panel.open(d);
-    });
+  .objectsData(stories)
+  .objectLat((d) => d.pin_lat)
+  .objectLng((d) => d.pin_lon)
+  .objectAltitude(0.02)
+  .objectThreeObject(() => pinTemplate.clone(true))
+  .onObjectClick((d) => {
+    console.log("PIN CLICK", d.id);
+    panel.open(d);
+  });
+
 
   console.log("Globe mounted. Pins:", stories.length);
   return globe;
