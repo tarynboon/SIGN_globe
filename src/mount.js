@@ -224,7 +224,7 @@ const SIGN_GREEN = "#81BC41";
  * 3D pin that "pegs" into the globe.
  * Uses emissive so it stays SIGN green under lighting.
  */
-function make3DPin({ height = 0.35, radius = 0.06, headRadius = 0.10 } = {}) {
+function make3DPin({ height = 0.25, radius = 0.035, headRadius = 0.06 } = {}) {
   const group = new THREE.Group();
 
   const mat = new THREE.MeshStandardMaterial({
