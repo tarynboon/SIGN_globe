@@ -384,13 +384,24 @@ export async function mountSignGlobe({ containerId = "sign-globe", height = 650 
 
   const pinTemplate = make3DPin();
 
-  globe
+globe
   .objectsData(stories)
-  .objectLat((d) => d.pin_lat)
-  .objectLng((d) => d.pin_lon)
+  .objectLat(d => d.pin_lat)
+  .objectLng(d => d.pin_lon)
   .objectAltitude(0.02)
-  .objectThreeObject(() => pinTemplate.clone(true))
-  .onObjectClick((d) => {
+  .objectThreeObject(d => {
+    const pin = pinTemplate.clone(true);
+
+    // 🔹 tilt amount (degrees → radians)
+    const TILT_DEG = 15;
+    const tiltRad = THREE.MathUtils.degToRad(TILT_DEG);
+
+    // 🔹 tilt forward slightly
+    pin.rotateX(-tiltRad);
+
+    return pin;
+  })
+  .onObjectClick(d => {
     console.log("PIN CLICK", d.id);
     panel.open(d);
   });
