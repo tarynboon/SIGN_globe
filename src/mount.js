@@ -2,7 +2,7 @@
 import Globe from "globe.gl";
 import * as THREE from "three";
 
-console.log("SIGN GLOBE BUILD:", "2026-01-22 pin-3d-green-v3");
+console.log("SIGN GLOBE BUILD:", "2026-01-22 pin-3d-green-v45");
 
 /**
  * Reads your Google Sheet (published to web).
@@ -218,93 +218,116 @@ function disableBlockingOverlays(container) {
   requestAnimationFrame(tick);
 }
 
-const SIGN_GREEN = "#81BC41";
+/** =========================
+ *  Pin visuals + interactions
+ *  ========================= */
 
-/**
- * 3D pin that "pegs" into the globe.
- * Uses emissive so it stays SIGN green under lighting.
- */
-function make3DPin({ height = 0.25, radius = 0.035, headRadius = 0.06 } = {}) {
+const SIGN_GREEN = "#81BC41";
+const SIGN_OUTLINE = "#2d6a1f";
+
+function make3DPin({ height = 0.65, radius = 0.06, headRadius = 0.12 } = {}) {
   const group = new THREE.Group();
 
+  // Per-pin material (so hover affects one pin)
   const mat = new THREE.MeshStandardMaterial({
     color: SIGN_GREEN,
     emissive: new THREE.Color(SIGN_GREEN),
-    emissiveIntensity: 0.35,
+    emissiveIntensity: 0.25,
     roughness: 0.25,
     metalness: 0.0,
   });
 
   // shaft
-  const shaft = new THREE.Mesh(
-    new THREE.CylinderGeometry(radius, radius, height, 12),
-    mat
-  );
+  const shaft = new THREE.Mesh(new THREE.CylinderGeometry(radius, radius, height, 14), mat);
   shaft.position.y = height / 2;
   group.add(shaft);
 
-  // outline FIRST (slightly bigger)
-  const outline = new THREE.Mesh(
-    new THREE.SphereGeometry(headRadius * 1.12, 16, 16),
-    new THREE.MeshBasicMaterial({ color: "#2d6a1f" })
-  );
-  outline.position.y = height + headRadius * 0.75;
-  group.add(outline);
-
   // head
-  const head = new THREE.Mesh(
-    new THREE.SphereGeometry(headRadius, 16, 16),
-    mat
-  );
-  head.position.copy(outline.position);
+  const headY = height + headRadius * 0.72;
+  const head = new THREE.Mesh(new THREE.SphereGeometry(headRadius, 18, 18), mat);
+  head.position.y = headY;
   group.add(head);
+
+  // outline rim (BackSide = proper outline effect)
+  const outline = new THREE.Mesh(
+    new THREE.SphereGeometry(headRadius * 1.14, 18, 18),
+    new THREE.MeshBasicMaterial({ color: SIGN_OUTLINE, side: THREE.BackSide })
+  );
+  outline.position.y = headY;
+  group.add(outline);
 
   // white dot
   const dot = new THREE.Mesh(
-    new THREE.CircleGeometry(headRadius * 0.45, 24),
+    new THREE.CircleGeometry(headRadius * 0.45, 28),
     new THREE.MeshBasicMaterial({ color: "#ffffff" })
   );
-  dot.position.y = head.position.y;
-  dot.position.z = headRadius * 1.15;
+  dot.position.set(0, headY, headRadius * 1.18);
   group.add(dot);
 
-  // BIG invisible click target (so click always works)
-  const click = new THREE.Sprite(
-    new THREE.SpriteMaterial({ transparent: true, opacity: 0 })
-  );
-  click.scale.set(30, 30, 1);
-  click.position.y = head.position.y;
-  group.add(click);
+  group.userData.pinMat = mat;
+  group.userData.baseScale = 105; // size (lower = smaller)
+  group.scale.set(group.userData.baseScale, group.userData.baseScale, group.userData.baseScale);
 
-  group.position.y = -0.05;
-  group.scale.set(10,10, 10);
+  // push peg slightly into globe
+  group.position.y = -0.10;
+
+  group.traverse((o) => {
+    o.castShadow = false;
+    o.receiveShadow = false;
+  });
 
   return group;
 }
 
+function setPinGlow(pin, on) {
+  const m = pin?.userData?.pinMat;
+  if (!m) return;
 
-/**
- * Invisible sprite click target so onObjectClick always fires reliably.
- */
-function addClickTarget(group) {
-  const canvas = document.createElement("canvas");
-  canvas.width = 16;
-  canvas.height = 16;
+  m.emissiveIntensity = on ? 0.95 : 0.25;
 
-  const tex = new THREE.CanvasTexture(canvas);
-  const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, opacity: 0 });
+  const base = pin.userData.baseScale ?? 105;
+  const target = on ? base * 1.08 : base;
+  pin.scale.set(target, target, target);
+}
 
-  const sprite = new THREE.Sprite(mat);
-  sprite.scale.set(24, 24, 1); // BIG click area
-  sprite.position.y = 14; // near head
-  group.add(sprite);
+function bouncePin(pin) {
+  if (!pin) return;
 
-  return group;
+  const baseY = pin.userData.baseY ?? pin.position.y;
+  pin.userData.baseY = baseY;
+
+  pin.userData.bouncing = true;
+  const start = performance.now();
+  const DURATION = 520;
+  const AMP = 0.22;
+
+  function frame(t) {
+    if (!pin.userData.bouncing) return;
+
+    const p = Math.min(1, (t - start) / DURATION);
+    const s = Math.sin(p * Math.PI) * (1 - p);
+
+    pin.position.y = baseY + s * AMP;
+
+    const base = pin.userData.baseScale ?? 105;
+    const k = 1 + s * 0.18;
+    pin.scale.set(base * k, base * (1 + s * 0.28), base * k);
+
+    if (p < 1) requestAnimationFrame(frame);
+    else {
+      pin.position.y = baseY;
+      pin.scale.set(base, base, base);
+      pin.userData.bouncing = false;
+    }
+  }
+
+  requestAnimationFrame(frame);
 }
 
 // Allow multiple pins at same lat/lon by spreading them slightly
 function jitterDuplicatesByLatLng(stories, jitterDeg = 0.10) {
   const map = new Map();
+
   for (const s of stories) {
     const key = `${s.pin_lat.toFixed(5)},${s.pin_lon.toFixed(5)}`;
     if (!map.has(key)) map.set(key, []);
@@ -312,6 +335,7 @@ function jitterDuplicatesByLatLng(stories, jitterDeg = 0.10) {
   }
 
   const out = [];
+
   for (const arr of map.values()) {
     if (arr.length === 1) {
       out.push(arr[0]);
@@ -326,8 +350,7 @@ function jitterDuplicatesByLatLng(stories, jitterDeg = 0.10) {
       const angle = (i / n) * Math.PI * 2;
       const dLat = jitterDeg * Math.cos(angle);
       const dLon =
-        (jitterDeg * Math.sin(angle)) /
-        Math.max(0.2, Math.cos((baseLat * Math.PI) / 180));
+        (jitterDeg * Math.sin(angle)) / Math.max(0.2, Math.cos((baseLat * Math.PI) / 180));
 
       out.push({
         ...s,
@@ -336,8 +359,13 @@ function jitterDuplicatesByLatLng(stories, jitterDeg = 0.10) {
       });
     });
   }
+
   return out;
 }
+
+/** =========================
+ *  Mount
+ *  ========================= */
 
 export async function mountSignGlobe({ containerId = "sign-globe", height = 650 } = {}) {
   const container = document.getElementById(containerId);
@@ -359,6 +387,7 @@ export async function mountSignGlobe({ containerId = "sign-globe", height = 650 
     globe.enablePointerInteraction(true);
   }
 
+  // Controls
   const controls = globe.controls();
   controls.enabled = true;
   controls.enableRotate = true;
@@ -370,42 +399,69 @@ export async function mountSignGlobe({ containerId = "sign-globe", height = 650 
   controls.autoRotate = true;
   controls.autoRotateSpeed = 0.001;
 
+  // Lights
   globe.scene().add(new THREE.AmbientLight(0xffffff, 0.9));
-
   const dir = new THREE.DirectionalLight(0xffffff, 0.9);
   dir.position.set(1, 1, 1);
   globe.scene().add(dir);
 
+  // UI
   const panel = makePanel(container);
   disableBlockingOverlays(container);
 
+  // Data
   const storiesRaw = await loadStoriesFromGoogleSheet();
   const stories = jitterDuplicatesByLatLng(storiesRaw, 0.10);
 
+  // Pins
   const pinTemplate = make3DPin();
 
-globe
-  .objectsData(stories)
-  .objectLat(d => d.pin_lat)
-  .objectLng(d => d.pin_lon)
-  .objectAltitude(0.02)
-  .objectThreeObject(d => {
-    const pin = pinTemplate.clone(true);
+  let lastHovered = null;
 
-    // 🔹 tilt amount (degrees → radians)
-    const TILT_DEG = 15;
-    const tiltRad = THREE.MathUtils.degToRad(TILT_DEG);
+  globe
+    .objectsData(stories)
+    .objectLat((d) => d.pin_lat)
+    .objectLng((d) => d.pin_lon)
+    .objectAltitude(0.06) // stick out more
+    .objectThreeObject((d) => {
+      const pin = pinTemplate.clone(true);
 
-    // 🔹 tilt forward slightly
-    pin.rotateX(-tiltRad);
+      // ✅ 45° tilt (out of the globe)
+      pin.rotateX(-THREE.MathUtils.degToRad(45));
 
-    return pin;
-  })
-  .onObjectClick(d => {
-    console.log("PIN CLICK", d.id);
-    panel.open(d);
-  });
+      // Make the green material unique per pin so glow is per-pin
+      const sharedMat = pin.userData.pinMat;
+      if (sharedMat) {
+        const uniqueMat = sharedMat.clone();
+        pin.userData.pinMat = uniqueMat;
 
+        pin.traverse((o) => {
+          if (o.isMesh && o.material && o.material.type === "MeshStandardMaterial") {
+            o.material = uniqueMat;
+          }
+        });
+      }
+
+      // ✅ store handle on the data row
+      d.__pin = pin;
+
+      return pin;
+    })
+    .onObjectHover((d) => {
+      if (lastHovered && lastHovered !== d) setPinGlow(lastHovered.__pin, false);
+
+      if (d && d.__pin) {
+        setPinGlow(d.__pin, true);
+        lastHovered = d;
+      } else {
+        lastHovered = null;
+      }
+    })
+    .onObjectClick((d) => {
+      if (!d) return;
+      panel.open(d);
+      if (d.__pin) bouncePin(d.__pin);
+    });
 
   console.log("Globe mounted. Pins:", stories.length);
   return globe;
