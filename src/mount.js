@@ -268,7 +268,7 @@ function makePinInstance({ height = 0.65, radius = 0.06, headRadius = 0.12 } = {
   group.add(collider);
 
   group.userData.pinMat = mat;
-  group.userData.baseScale = 95; // tweak size here (smaller -> smaller pins)
+  group.userData.baseScale = 25; // tweak size here (smaller -> smaller pins)
   group.scale.set(group.userData.baseScale, group.userData.baseScale, group.userData.baseScale);
 
   // push peg slightly into globe
