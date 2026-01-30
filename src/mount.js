@@ -387,8 +387,11 @@ export async function mountSignGlobe({ containerId = "sign-globe", height = 650 
   controls.enablePan = false;
   controls.enableDamping = true;
   controls.dampingFactor = 0.08;
+  
   controls.autoRotate = true;
-  controls.autoRotateSpeed = 0.001;
+  // very slow. If direction is opposite of what you want, remove the minus.
+  controls.autoRotateSpeed = -0.06;
+  
 
   globe.scene().add(new THREE.AmbientLight(0xffffff, 0.9));
   const dir = new THREE.DirectionalLight(0xffffff, 0.9);
