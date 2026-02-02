@@ -2,7 +2,7 @@
 import Globe from "globe.gl";
 import * as THREE from "three";
 
-console.log("SIGN GLOBE BUILD:", "2026-01-31 pins-teardrop-tip-anchor-v1");
+console.log("SIGN GLOBE BUILD:", "2026-01-22 pin-teardrop-solid-tip-anchor-v1");
 
 /**
  * Reads your Google Sheet (published to web).
@@ -32,6 +32,7 @@ async function loadStoriesFromGoogleSheet() {
   }
 
   const json = JSON.parse(text.slice(start, end + 1));
+
   const colsRaw = (json.table.cols || []).map((c) => (c.label ?? ""));
   const cols = colsRaw.map((s) => s.trim().toLowerCase());
   const rows = json.table.rows || [];
@@ -92,9 +93,10 @@ async function loadStoriesFromGoogleSheet() {
   return stories;
 }
 
-/** ---------------------------
- *  Panel UI
- *  -------------------------- */
+/** =========================
+ *  Popup panel
+ *  ========================= */
+
 function makePanel(container) {
   const panel = document.createElement("div");
   panel.dataset.sgPanel = "1";
@@ -122,7 +124,7 @@ function makePanel(container) {
         <div id="sg-title" style="font-weight:700;font-size:16px;"></div>
         <div id="sg-meta" style="opacity:.7;font-size:13px; margin-top:2px;"></div>
       </div>
-      <button id="sg-close" style="cursor:pointer; font-size:18px; line-height:1;">×</button>
+      <button id="sg-close" style="cursor:pointer;">×</button>
     </div>
 
     <div id="sg-image" style="margin-top:10px;display:none;">
@@ -187,6 +189,7 @@ function makePanel(container) {
 }
 
 // Prevent a blocking absolute overlay div from stealing drag events.
+// Keep the panel clickable.
 function disableBlockingOverlays(container) {
   let tries = 0;
   const tick = () => {
@@ -217,149 +220,153 @@ function disableBlockingOverlays(container) {
   requestAnimationFrame(tick);
 }
 
-/** ---------------------------
- *  Pins (teardrop sprite)
- *  Tip anchored at (0,0,0)
- *  -------------------------- */
+/** =========================
+ *  Pin texture + interactions
+ *  ========================= */
 
 const SIGN_GREEN = "#81BC41";
 const SIGN_GREEN_DARK = "#2d6a1f";
-const PIN_SIZE = 9.0; // 👈 make smaller/larger (try 7.5 or 6.5)
 
-// Draw a teardrop pin on a canvas and return a THREE texture
-function makeTeardropTexture({ w = 256, h = 384 } = {}) {
+// One knob to make pins smaller/larger
+const PIN_SCALE = 10.5; // try 9.5 (smaller) or 12 (larger)
+
+function makeTeardropPinTexture({
+  w = 512,
+  h = 768,
+  fill = SIGN_GREEN,
+  outline = SIGN_GREEN_DARK,
+} = {}) {
   const canvas = document.createElement("canvas");
   canvas.width = w;
   canvas.height = h;
+
   const ctx = canvas.getContext("2d");
   ctx.clearRect(0, 0, w, h);
 
   const cx = w / 2;
-  const headY = h * 0.32;
-  const r = w * 0.22;
+  const headY = h * 0.30;
+  const r = w * 0.21;
   const tipY = h * 0.93;
 
-  // Main pin path
-  const path = new Path2D();
-  path.arc(cx, headY, r, 0, Math.PI * 2);
-  path.moveTo(cx - r * 0.95, headY + r * 0.10);
-  path.bezierCurveTo(cx - r * 1.35, headY + r * 1.05, cx - r * 0.55, headY + r * 2.55, cx, tipY);
-  path.bezierCurveTo(cx + r * 0.55, headY + r * 2.55, cx + r * 1.35, headY + r * 1.05, cx + r * 0.95, headY + r * 0.10);
-  path.closePath();
+  // --- Draw outer teardrop shape as a single filled shape (NO see-through) ---
+  const shape = new Path2D();
 
-  // Shadow (subtle)
+  // top head circle
+  shape.arc(cx, headY, r, 0, Math.PI * 2);
+
+  // shoulders -> tip
+  shape.moveTo(cx - r * 0.95, headY + r * 0.15);
+  shape.bezierCurveTo(
+    cx - r * 1.35, headY + r * 1.10,
+    cx - r * 0.55, headY + r * 2.60,
+    cx, tipY
+  );
+  shape.bezierCurveTo(
+    cx + r * 0.55, headY + r * 2.60,
+    cx + r * 1.35, headY + r * 1.10,
+    cx + r * 0.95, headY + r * 0.15
+  );
+  shape.closePath();
+
+  // subtle shadow
   ctx.save();
-  ctx.shadowColor = "rgba(0,0,0,0.20)";
+  ctx.shadowColor = "rgba(0,0,0,0.28)";
   ctx.shadowBlur = w * 0.06;
-  ctx.shadowOffsetY = h * 0.01;
+  ctx.shadowOffsetY = h * 0.012;
 
-  // Fill
-  ctx.fillStyle = SIGN_GREEN;
-  ctx.fill(path);
-
-  // Outline
-  ctx.lineWidth = w * 0.05;
-  ctx.strokeStyle = SIGN_GREEN_DARK;
-  ctx.lineJoin = "round";
-  ctx.lineCap = "round";
-  ctx.stroke(path);
+  // fill solid
+  ctx.fillStyle = fill;
+  ctx.fill(shape);
 
   ctx.restore();
 
-  // Inner white dot
-  ctx.fillStyle = "#fff";
+  // outline (helps pop)
+  ctx.lineWidth = w * 0.05;
+  ctx.strokeStyle = outline;
+  ctx.lineJoin = "round";
+  ctx.lineCap = "round";
+  ctx.stroke(shape);
+
+  // inner white dot
+  ctx.fillStyle = "#ffffff";
   ctx.beginPath();
   ctx.arc(cx, headY, r * 0.45, 0, Math.PI * 2);
   ctx.fill();
 
-  // Small dark dot (optional “depth”)
-  ctx.fillStyle = "rgba(0,0,0,0.18)";
-  ctx.beginPath();
-  ctx.arc(cx, headY + r * 0.10, r * 0.22, 0, Math.PI * 2);
-  ctx.fill();
-
-  const tex = new THREE.CanvasTexture(canvas);
-  tex.needsUpdate = true;
-  return tex;
+  return new THREE.CanvasTexture(canvas);
 }
 
-// A group with TWO sprites: front + back (so you don't see "through" it from behind)
-function makeTeardropPinSprite() {
-  const group = new THREE.Group();
+function makePinSprite() {
+  const texture = makeTeardropPinTexture();
 
-  const tex = makeTeardropTexture();
+  const mat = new THREE.SpriteMaterial({
+    map: texture,
+    transparent: true,
+    // ✅ flicker fix:
+    depthTest: false,
+    depthWrite: false,
+  });
 
-  const makeSprite = () => {
-    const mat = new THREE.SpriteMaterial({
-      map: tex,
-      transparent: true,
-      depthTest: true,
-      depthWrite: false,
-    });
-    const s = new THREE.Sprite(mat);
-    // scale in world units
-    s.scale.set(PIN_SIZE, PIN_SIZE * 1.45, 1);
-    // anchor near the tip so the TIP is at y=0
-    // sprite center: (0.5, 0) would be bottom, but teardrop has extra blank margin.
-    // 0.03 is a good “tip anchor” for this drawing.
-    s.center.set(0.5, 0.03);
-    return s;
-  };
+  const sprite = new THREE.Sprite(mat);
 
-  const front = makeSprite();
-  group.add(front);
+  // World size on globe (x,y)
+  sprite.scale.set(PIN_SCALE, PIN_SCALE * 1.45, 1);
 
-  const back = makeSprite();
-  back.rotateY(Math.PI); // face opposite direction
-  group.add(back);
+  // ✅ TIP is the anchor point
+  // (0.5 = centered horizontally, 0.98 = near bottom tip)
+  sprite.center.set(0.5, 0.98);
 
-  // Make the group origin be the tip point (0,0,0)
-  // Since we anchored sprite centers to the tip, group origin is already correct.
+  // ensure draws above globe consistently
+  sprite.renderOrder = 10;
 
-  // Keep refs for hover glow
-  group.userData.frontMat = front.material;
-  group.userData.backMat = back.material;
-  group.userData.baseScale = 1;
+  // store for hover/click
+  sprite.userData.baseScale = sprite.scale.clone();
+  sprite.userData.baseY = sprite.position.y;
+  sprite.userData.pinMat = mat;
 
-  return group;
+  return sprite;
 }
 
-// Hover glow: brighten (simple emissive-like effect via opacity + color)
-function setPinGlow(pinGroup, on) {
-  if (!pinGroup?.userData?.frontMat) return;
-  const a = on ? 1.0 : 1.0;
-  pinGroup.userData.frontMat.opacity = a;
-  pinGroup.userData.backMat.opacity = a;
+function setPinGlow(pinSprite, on) {
+  if (!pinSprite) return;
+  const base = pinSprite.userData.baseScale;
+  if (!base) return;
 
-  // slight scale bump
-  const target = on ? 1.08 : 1.0;
-  pinGroup.scale.set(target, target, target);
+  const k = on ? 1.08 : 1.0;
+  pinSprite.scale.set(base.x * k, base.y * k, base.z);
+
+  // brighten (emulate glow) by bumping opacity + color
+  const mat = pinSprite.userData.pinMat;
+  if (mat) {
+    mat.opacity = on ? 1.0 : 0.98;
+  }
 }
 
-// Click bounce
-function bouncePin(pinGroup) {
-  if (!pinGroup) return;
+function bouncePin(pinSprite) {
+  if (!pinSprite) return;
 
-  const baseY = pinGroup.userData.baseY ?? pinGroup.position.y;
-  pinGroup.userData.baseY = baseY;
-
-  pinGroup.userData.bouncing = true;
   const start = performance.now();
   const DURATION = 520;
-  const AMP = 0.12;
+  const AMP = 0.30; // bounce amount
+  const baseY = pinSprite.userData.baseY ?? pinSprite.position.y;
+  pinSprite.userData.baseY = baseY;
+
+  const baseScale = pinSprite.userData.baseScale;
 
   function frame(t) {
-    if (!pinGroup.userData.bouncing) return;
-
     const p = Math.min(1, (t - start) / DURATION);
     const s = Math.sin(p * Math.PI) * (1 - p);
 
-    pinGroup.position.y = baseY + s * AMP;
+    pinSprite.position.y = baseY + s * AMP;
+
+    // tiny squash/stretch
+    const k = 1 + s * 0.10;
+    pinSprite.scale.set(baseScale.x * k, baseScale.y * (1 + s * 0.18), baseScale.z);
 
     if (p < 1) requestAnimationFrame(frame);
     else {
-      pinGroup.position.y = baseY;
-      pinGroup.userData.bouncing = false;
+      pinSprite.position.y = baseY;
+      pinSprite.scale.copy(baseScale);
     }
   }
 
@@ -369,7 +376,6 @@ function bouncePin(pinGroup) {
 // Allow multiple pins at same lat/lon by spreading them slightly
 function jitterDuplicatesByLatLng(stories, jitterDeg = 0.10) {
   const map = new Map();
-
   for (const s of stories) {
     const key = `${s.pin_lat.toFixed(5)},${s.pin_lon.toFixed(5)}`;
     if (!map.has(key)) map.set(key, []);
@@ -377,7 +383,6 @@ function jitterDuplicatesByLatLng(stories, jitterDeg = 0.10) {
   }
 
   const out = [];
-
   for (const arr of map.values()) {
     if (arr.length === 1) {
       out.push(arr[0]);
@@ -392,7 +397,8 @@ function jitterDuplicatesByLatLng(stories, jitterDeg = 0.10) {
       const angle = (i / n) * Math.PI * 2;
       const dLat = jitterDeg * Math.cos(angle);
       const dLon =
-        (jitterDeg * Math.sin(angle)) / Math.max(0.2, Math.cos((baseLat * Math.PI) / 180));
+        (jitterDeg * Math.sin(angle)) /
+        Math.max(0.2, Math.cos((baseLat * Math.PI) / 180));
 
       out.push({
         ...s,
@@ -405,9 +411,10 @@ function jitterDuplicatesByLatLng(stories, jitterDeg = 0.10) {
   return out;
 }
 
-/** ---------------------------
+/** =========================
  *  Mount
- *  -------------------------- */
+ *  ========================= */
+
 export async function mountSignGlobe({ containerId = "sign-globe", height = 650 } = {}) {
   const container = document.getElementById(containerId);
   if (!container) throw new Error(`Missing #${containerId}`);
@@ -428,7 +435,6 @@ export async function mountSignGlobe({ containerId = "sign-globe", height = 650 
     globe.enablePointerInteraction(true);
   }
 
-  // Controls (very slow clockwise rotation)
   const controls = globe.controls();
   controls.enabled = true;
   controls.enableRotate = true;
@@ -437,64 +443,49 @@ export async function mountSignGlobe({ containerId = "sign-globe", height = 650 
   controls.enableDamping = true;
   controls.dampingFactor = 0.08;
 
+  // very slow always-on rotation
   controls.autoRotate = true;
-  // 👇 “very very slow” clockwise; tweak smaller if needed (0.0002–0.001)
-  controls.autoRotateSpeed = 0.00035;
+  controls.autoRotateSpeed = 0.06; // slower = smaller number (try 0.02–0.08)
 
-  // Lights
   globe.scene().add(new THREE.AmbientLight(0xffffff, 0.9));
   const dir = new THREE.DirectionalLight(0xffffff, 0.9);
   dir.position.set(1, 1, 1);
   globe.scene().add(dir);
 
-  // UI
   const panel = makePanel(container);
   disableBlockingOverlays(container);
 
-  // Data
   const storiesRaw = await loadStoriesFromGoogleSheet();
   const stories = jitterDuplicatesByLatLng(storiesRaw, 0.10);
 
-  // Template pin (we clone per story)
-  const pinTemplate = makeTeardropPinSprite();
-
-  let lastHovered = null;
+  let lastHoveredSprite = null;
 
   globe
     .objectsData(stories)
     .objectLat((d) => d.pin_lat)
     .objectLng((d) => d.pin_lon)
-
-    // Tip is the anchor; altitude pushes the entire pin outward from the surface
-    // Keep small to avoid floating far above exact point.
-    .objectAltitude(0.01)
-
+    .objectAltitude(0.04) // tiny lift to avoid z-fighting, but tip still anchors visually
     .objectThreeObject((d) => {
-      const pin = pinTemplate.clone(true);
+      const sprite = makePinSprite();
 
-      // Make it “stick out” at ~45° visually
-      // (This is a local rotation; globe.gl already orients objects outward.)
-      pin.rotateZ(-THREE.MathUtils.degToRad(45));
-
-      // Store handle for hover/bounce
-      d.__pin = pin;
-
-      return pin;
+      // store reference for hover/click
+      d.__pinSprite = sprite;
+      return sprite;
     })
     .onObjectHover((d) => {
-      if (lastHovered && lastHovered !== d) setPinGlow(lastHovered.__pin, false);
-
-      if (d && d.__pin) {
-        setPinGlow(d.__pin, true);
-        lastHovered = d;
-      } else {
-        lastHovered = null;
+      if (lastHoveredSprite && (!d || d.__pinSprite !== lastHoveredSprite)) {
+        setPinGlow(lastHoveredSprite, false);
+        lastHoveredSprite = null;
+      }
+      if (d && d.__pinSprite) {
+        setPinGlow(d.__pinSprite, true);
+        lastHoveredSprite = d.__pinSprite;
       }
     })
     .onObjectClick((d) => {
       if (!d) return;
       panel.open(d);
-      if (d.__pin) bouncePin(d.__pin);
+      if (d.__pinSprite) bouncePin(d.__pinSprite);
     });
 
   console.log("Globe mounted. Pins:", stories.length);
