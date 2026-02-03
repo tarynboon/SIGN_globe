@@ -445,8 +445,7 @@ export async function mountSignGlobe({ containerId = "sign-globe", height = 650 
 
   // very slow always-on rotation
   controls.autoRotate = true;
-  controls.autoRotateSpeed = 0.03; // slower = smaller number (try 0.02–0.08)
-  controls.addEventListener("start", stopAutoRotateOnce);
+  controls.autoRotateSpeed = 0.06; // slower = smaller number (try 0.02–0.08)
 
   globe.scene().add(new THREE.AmbientLight(0xffffff, 0.9));
   const dir = new THREE.DirectionalLight(0xffffff, 0.9);
@@ -483,23 +482,11 @@ export async function mountSignGlobe({ containerId = "sign-globe", height = 650 
         lastHoveredSprite = d.__pinSprite;
       }
     })
-    let autoRotateStopped = false;
-
-    function stopAutoRotateOnce() {
-      if (autoRotateStopped) return;
-      controls.autoRotate = false;
-      autoRotateStopped = true;
-    }
-
     .onObjectClick((d) => {
       if (!d) return;
-    
-      stopAutoRotateOnce();   // ✅ stop rotation on first pin click
-    
       panel.open(d);
       if (d.__pinSprite) bouncePin(d.__pinSprite);
     });
-    
 
   console.log("Globe mounted. Pins:", stories.length);
   return globe;
