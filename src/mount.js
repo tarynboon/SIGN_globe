@@ -2,7 +2,7 @@
 import Globe from "globe.gl";
 import * as THREE from "three";
 
-console.log("SIGN GLOBE BUILD:", "2026-01-22 pin-teardrop-solid-tip-anchor-v1");
+console.log("SIGN GLOBE BUILD:", "2026-02-03 teardrop-plane-spiderfy-anchored-FULL-v1");
 
 /**
  * Reads your Google Sheet (published to web).
@@ -32,7 +32,6 @@ async function loadStoriesFromGoogleSheet() {
   }
 
   const json = JSON.parse(text.slice(start, end + 1));
-
   const colsRaw = (json.table.cols || []).map((c) => (c.label ?? ""));
   const cols = colsRaw.map((s) => s.trim().toLowerCase());
   const rows = json.table.rows || [];
@@ -58,11 +57,8 @@ async function loadStoriesFromGoogleSheet() {
   // - "1,234.5" -> 1234.5 (thousands comma)
   const toNum = (v) => {
     let s = String(v ?? "").trim();
-    if (s.includes(",") && !s.includes(".")) {
-      s = s.replace(",", ".");
-    } else {
-      s = s.replace(/,/g, "");
-    }
+    if (s.includes(",") && !s.includes(".")) s = s.replace(",", ".");
+    else s = s.replace(/,/g, "");
     const n = parseFloat(s);
     return Number.isFinite(n) ? n : NaN;
   };
@@ -94,8 +90,17 @@ async function loadStoriesFromGoogleSheet() {
 }
 
 /** =========================
- *  Popup panel
+ *  Panel (Story mode + Cluster chooser mode)
  *  ========================= */
+
+function escapeHtml(s) {
+  return String(s ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
 
 function makePanel(container) {
   const panel = document.createElement("div");
@@ -105,8 +110,8 @@ function makePanel(container) {
     position:absolute;
     right:16px;
     top:16px;
-    width:min(420px, 92%);
-    max-height:80vh;
+    width:min(440px, 92%);
+    max-height:82vh;
     background:#fff;
     border-radius:12px;
     box-shadow:0 8px 24px rgba(0,0,0,.18);
@@ -121,32 +126,51 @@ function makePanel(container) {
   panel.innerHTML = `
     <div style="display:flex; justify-content:space-between; gap:12px; align-items:flex-start;">
       <div>
-        <div id="sg-title" style="font-weight:700;font-size:16px;"></div>
+        <div id="sg-title" style="font-weight:800;font-size:16px;"></div>
         <div id="sg-meta" style="opacity:.7;font-size:13px; margin-top:2px;"></div>
       </div>
-      <button id="sg-close" style="cursor:pointer;">×</button>
+      <button id="sg-close" style="cursor:pointer; font-size:18px; line-height:1; border:0; background:transparent;">×</button>
     </div>
 
-    <div id="sg-image" style="margin-top:10px;display:none;">
-      <img
-        id="sg-img"
-        style="width:100%;height:auto;max-height:28vh;object-fit:contain;border-radius:10px;display:block;background:#f3f3f3;"
-      />
+    <!-- Cluster chooser -->
+    <div id="sg-cluster" style="display:none; margin-top:10px;">
+      <div style="font-weight:700; margin-bottom:8px;">Choose a story</div>
+      <div id="sg-list"
+        style="
+          max-height:52vh;
+          overflow:auto;
+          border:1px solid rgba(0,0,0,0.08);
+          border-radius:10px;
+        "
+      ></div>
+      <div style="margin-top:10px; opacity:.7; font-size:12px;">
+        Tip: click a pin in the ring or select from this list.
+      </div>
     </div>
 
-    <div
-      id="sg-body"
-      style="
-        margin-top:10px;
-        line-height:1.45;
-        max-height:35vh;
-        overflow-y:auto;
-        padding-right:6px;
-      "
-    ></div>
+    <!-- Story -->
+    <div id="sg-story" style="display:none;">
+      <div id="sg-image" style="margin-top:10px;display:none;">
+        <img
+          id="sg-img"
+          style="width:100%;height:auto;max-height:28vh;object-fit:contain;border-radius:10px;display:block;background:#f3f3f3;"
+        />
+      </div>
 
-    <div style="margin-top:10px;">
-      <a id="sg-src" href="#" target="_blank" rel="noopener" style="display:none;">Read on SIGN</a>
+      <div
+        id="sg-body"
+        style="
+          margin-top:10px;
+          line-height:1.45;
+          max-height:35vh;
+          overflow-y:auto;
+          padding-right:6px;
+        "
+      ></div>
+
+      <div style="margin-top:10px;">
+        <a id="sg-src" href="#" target="_blank" rel="noopener" style="display:none;">Read more</a>
+      </div>
     </div>
   `;
 
@@ -154,42 +178,89 @@ function makePanel(container) {
 
   const titleEl = panel.querySelector("#sg-title");
   const metaEl = panel.querySelector("#sg-meta");
+
+  const clusterWrap = panel.querySelector("#sg-cluster");
+  const listEl = panel.querySelector("#sg-list");
+
+  const storyWrap = panel.querySelector("#sg-story");
   const bodyEl = panel.querySelector("#sg-body");
   const imgWrap = panel.querySelector("#sg-image");
   const imgEl = panel.querySelector("#sg-img");
   const srcEl = panel.querySelector("#sg-src");
 
   panel.querySelector("#sg-close").onclick = () => (panel.style.display = "none");
+  const show = () => (panel.style.display = "block");
 
-  return {
-    open(story) {
-      titleEl.textContent = story.title || "";
-      metaEl.textContent = story.country || "";
+  function showStory(story) {
+    titleEl.textContent = story.title || "";
+    metaEl.textContent = story.country || "";
 
-      if (story.image_url) {
-        imgEl.src = story.image_url;
-        imgWrap.style.display = "block";
-      } else {
-        imgEl.src = "";
-        imgWrap.style.display = "none";
-      }
+    clusterWrap.style.display = "none";
+    storyWrap.style.display = "block";
 
-      bodyEl.innerHTML = story.story_html || "";
+    if (story.image_url) {
+      imgEl.src = story.image_url;
+      imgWrap.style.display = "block";
+    } else {
+      imgEl.src = "";
+      imgWrap.style.display = "none";
+    }
 
-      if (story.source_url) {
-        srcEl.href = story.source_url;
-        srcEl.style.display = "inline";
-      } else {
-        srcEl.style.display = "none";
-      }
+    bodyEl.innerHTML = story.story_html || "";
 
-      panel.style.display = "block";
-    },
-  };
+    if (story.source_url) {
+      srcEl.href = story.source_url;
+      srcEl.style.display = "inline";
+    } else {
+      srcEl.style.display = "none";
+    }
+
+    show();
+  }
+
+  function showCluster({ title, meta, items, onPick, onHover }) {
+    titleEl.textContent = title || "";
+    metaEl.textContent = meta || "";
+
+    storyWrap.style.display = "none";
+    clusterWrap.style.display = "block";
+
+    listEl.innerHTML = "";
+    items.forEach((s) => {
+      const row = document.createElement("button");
+      row.type = "button";
+      row.style.cssText = `
+        width:100%;
+        text-align:left;
+        padding:10px 12px;
+        border:0;
+        border-bottom:1px solid rgba(0,0,0,0.06);
+        background:#fff;
+        cursor:pointer;
+        display:flex;
+        flex-direction:column;
+        gap:3px;
+      `;
+      row.innerHTML = `
+        <div style="font-weight:700; font-size:14px; line-height:1.25;">
+          ${escapeHtml(s.title || "(Untitled story)")}
+        </div>
+        <div style="opacity:.75; font-size:12px;">
+          ${escapeHtml(s.country || "")}
+        </div>
+      `;
+      row.onmouseenter = () => onHover?.(s, true);
+      row.onmouseleave = () => onHover?.(s, false);
+      row.onclick = () => onPick?.(s);
+      listEl.appendChild(row);
+    });
+
+    show();
+  }
+
+  return { showStory, showCluster };
 }
 
-// Prevent a blocking absolute overlay div from stealing drag events.
-// Keep the panel clickable.
 function disableBlockingOverlays(container) {
   let tries = 0;
   const tick = () => {
@@ -208,9 +279,7 @@ function disableBlockingOverlays(container) {
       return cs.position === "absolute";
     });
 
-    overlays.forEach((el) => {
-      el.style.pointerEvents = "none";
-    });
+    overlays.forEach((el) => (el.style.pointerEvents = "none"));
 
     const panel = container.querySelector('[data-sg-panel="1"]');
     if (panel) panel.style.pointerEvents = "auto";
@@ -221,194 +290,260 @@ function disableBlockingOverlays(container) {
 }
 
 /** =========================
- *  Pin texture + interactions
+ *  Pin texture (teardrop) — FULL SOLID INTERIOR
+ *  Key trick: stroke first, then clip-fill so outline never "eats" the green.
+ *  Also disable mipmaps to avoid weird edge blending.
  *  ========================= */
 
 const SIGN_GREEN = "#81BC41";
-const SIGN_GREEN_DARK = "#2d6a1f";
-
-// One knob to make pins smaller/larger
-const PIN_SCALE = 10.5; // try 9.5 (smaller) or 12 (larger)
-
-function makeTeardropPinTexture({
-  w = 512,
-  h = 768,
-  fill = SIGN_GREEN,
-  outline = SIGN_GREEN_DARK,
-} = {}) {
+const SIGN_OUTLINE = "#2d6a1f";
+function makePinTexture({ w = 256, h = 384 } = {}) {
   const canvas = document.createElement("canvas");
   canvas.width = w;
   canvas.height = h;
-
   const ctx = canvas.getContext("2d");
+
   ctx.clearRect(0, 0, w, h);
 
   const cx = w / 2;
-  const headY = h * 0.30;
-  const r = w * 0.21;
-  const tipY = h * 0.93;
+  const cy = h * 0.33;
+  const r  = w * 0.22;
+  const tipY = h * 0.94;
 
-  // --- Draw outer teardrop shape as a single filled shape (NO see-through) ---
-  const shape = new Path2D();
-
-  // top head circle
-  shape.arc(cx, headY, r, 0, Math.PI * 2);
-
-  // shoulders -> tip
-  shape.moveTo(cx - r * 0.95, headY + r * 0.15);
-  shape.bezierCurveTo(
-    cx - r * 1.35, headY + r * 1.10,
-    cx - r * 0.55, headY + r * 2.60,
+  const path = new Path2D();
+  path.arc(cx, cy, r, 0, Math.PI * 2);
+  path.moveTo(cx - r * 0.95, cy + r * 0.10);
+  path.bezierCurveTo(
+    cx - r * 1.35, cy + r * 1.05,
+    cx - r * 0.55, cy + r * 2.60,
     cx, tipY
   );
-  shape.bezierCurveTo(
-    cx + r * 0.55, headY + r * 2.60,
-    cx + r * 1.35, headY + r * 1.10,
-    cx + r * 0.95, headY + r * 0.15
+  path.bezierCurveTo(
+    cx + r * 0.55, cy + r * 2.60,
+    cx + r * 1.35, cy + r * 1.05,
+    cx + r * 0.95, cy + r * 0.10
   );
-  shape.closePath();
+  path.closePath();
 
-  // subtle shadow
-  ctx.save();
-  ctx.shadowColor = "rgba(0,0,0,0.28)";
-  ctx.shadowBlur = w * 0.06;
-  ctx.shadowOffsetY = h * 0.012;
+  // 1) Fill solid green
+  ctx.fillStyle = SIGN_GREEN;
+  ctx.fill(path);
 
-  // fill solid
-  ctx.fillStyle = fill;
-  ctx.fill(shape);
-
-  ctx.restore();
-
-  // outline (helps pop)
-  ctx.lineWidth = w * 0.05;
-  ctx.strokeStyle = outline;
+  // 2) Stroke outline
+  const lw = w * 0.05;
+  ctx.lineWidth = lw;
+  ctx.strokeStyle = SIGN_OUTLINE;
   ctx.lineJoin = "round";
   ctx.lineCap = "round";
-  ctx.stroke(shape);
+  ctx.stroke(path);
 
-  // inner white dot
-  ctx.fillStyle = "#ffffff";
+  // ✅ 3) COVER the inside part of the head outline (removes the “crescent”)
+  ctx.fillStyle = SIGN_GREEN;
   ctx.beginPath();
-  ctx.arc(cx, headY, r * 0.45, 0, Math.PI * 2);
+  ctx.arc(cx, cy, r - lw * 0.65, 0, Math.PI * 2);
   ctx.fill();
 
-  return new THREE.CanvasTexture(canvas);
+  // 4) White dot last
+  ctx.fillStyle = "#fff";
+  ctx.beginPath();
+  ctx.arc(cx, cy, r * 0.45, 0, Math.PI * 2);
+  ctx.fill();
+
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.needsUpdate = true;
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.generateMipmaps = false;
+  tex.minFilter = THREE.LinearFilter;
+  tex.magFilter = THREE.LinearFilter;
+  return tex;
 }
 
-function makePinSprite() {
-  const texture = makeTeardropPinTexture();
 
-  const mat = new THREE.SpriteMaterial({
-    map: texture,
-    transparent: true,
-    // ✅ flicker fix:
-    depthTest: false,
+// DEV: no cache to guarantee updates show. (You can cache later.)
+function getPinTexture() {
+  return makePinTexture();
+}
+
+/** =========================
+ *  Teardrop plane pin (NOT a sprite)
+ *  - tip anchored at group origin
+ *  - head up, tip down (we orient group to globe normal)
+ *  ========================= */
+
+function makePinObject({ scale = 6.0 } = {}) {
+  const group = new THREE.Group();
+
+  const mat = new THREE.MeshBasicMaterial({
+    map: getPinTexture(),
+  
+    // ✅ key: do NOT blend semi-transparent pixels with the globe
+    transparent: false,
+  
+    // ✅ punch out the background of the texture
+    alphaTest: 0.25,
+  
+    depthTest: true,
     depthWrite: false,
+    side: THREE.DoubleSide,
+    polygonOffset: true,
+    polygonOffsetFactor: -4,
+    polygonOffsetUnits: -4,
   });
+  
 
-  const sprite = new THREE.Sprite(mat);
+  const w = scale;
+  const h = scale * 1.42;
 
-  // World size on globe (x,y)
-  sprite.scale.set(PIN_SCALE, PIN_SCALE * 1.45, 1);
+  const plane = new THREE.Mesh(new THREE.PlaneGeometry(w, h), mat);
 
-  // ✅ TIP is the anchor point
-  // (0.5 = centered horizontally, 0.98 = near bottom tip)
-  sprite.center.set(0.5, 0.98);
+  // Tip anchored at group origin
+  plane.position.y = h * 0.5;
 
-  // ensure draws above globe consistently
-  sprite.renderOrder = 10;
+  // Small lift away from globe surface (prevents intersection)
+  plane.position.z = 0.00;
 
-  // store for hover/click
-  sprite.userData.baseScale = sprite.scale.clone();
-  sprite.userData.baseY = sprite.position.y;
-  sprite.userData.pinMat = mat;
+  plane.frustumCulled = false;
+  group.add(plane);
 
-  return sprite;
+  // Small invisible hit target near tip
+  const hit = new THREE.Mesh(
+    new THREE.SphereGeometry(scale * 0.14, 10, 10),
+    new THREE.MeshBasicMaterial({ transparent: true, opacity: 0 })
+  );
+  hit.position.set(0, scale * 0.18, 0);
+  group.add(hit);
+
+  group.userData.plane = plane;
+  group.userData.baseScale = scale;
+
+  return group;
 }
 
-function setPinGlow(pinSprite, on) {
-  if (!pinSprite) return;
-  const base = pinSprite.userData.baseScale;
-  if (!base) return;
-
-  const k = on ? 1.08 : 1.0;
-  pinSprite.scale.set(base.x * k, base.y * k, base.z);
-
-  // brighten (emulate glow) by bumping opacity + color
-  const mat = pinSprite.userData.pinMat;
-  if (mat) {
-    mat.opacity = on ? 1.0 : 0.98;
-  }
+function setHover(group, on) {
+  const plane = group?.userData?.plane;
+  if (!plane) return;
+  const k = on ? 1.06 : 1.0;
+  plane.scale.set(k, k, 1);
 }
 
-function bouncePin(pinSprite) {
-  if (!pinSprite) return;
+function bounce(group) {
+  const plane = group?.userData?.plane;
+  if (!plane) return;
 
   const start = performance.now();
-  const DURATION = 520;
-  const AMP = 0.30; // bounce amount
-  const baseY = pinSprite.userData.baseY ?? pinSprite.position.y;
-  pinSprite.userData.baseY = baseY;
-
-  const baseScale = pinSprite.userData.baseScale;
+  const D = 420;
 
   function frame(t) {
-    const p = Math.min(1, (t - start) / DURATION);
+    const p = Math.min(1, (t - start) / D);
     const s = Math.sin(p * Math.PI) * (1 - p);
-
-    pinSprite.position.y = baseY + s * AMP;
-
-    // tiny squash/stretch
-    const k = 1 + s * 0.10;
-    pinSprite.scale.set(baseScale.x * k, baseScale.y * (1 + s * 0.18), baseScale.z);
-
+    const k = 1 + s * 0.22;
+    plane.scale.set(k, k, 1);
     if (p < 1) requestAnimationFrame(frame);
-    else {
-      pinSprite.position.y = baseY;
-      pinSprite.scale.copy(baseScale);
-    }
+    else plane.scale.set(1, 1, 1);
   }
-
   requestAnimationFrame(frame);
 }
 
-// Allow multiple pins at same lat/lon by spreading them slightly
-function jitterDuplicatesByLatLng(stories, jitterDeg = 0.10) {
-  const map = new Map();
-  for (const s of stories) {
-    const key = `${s.pin_lat.toFixed(5)},${s.pin_lon.toFixed(5)}`;
-    if (!map.has(key)) map.set(key, []);
-    map.get(key).push(s);
-  }
+/** =========================
+ *  Per-frame anchoring (VERTICAL PIN)
+ *  - Round head UP (away from center)
+ *  - Tip DOWN (toward center)
+ *  - No camera billboarding (keeps consistent "map pin" look)
+ *  ========================= */
 
-  const out = [];
-  for (const arr of map.values()) {
-    if (arr.length === 1) {
-      out.push(arr[0]);
-      continue;
+function startPinAnchoring(globe, getStoriesRef) {
+  let raf = 0;
+  const Y = new THREE.Vector3(0, 1, 0);
+
+  const tick = () => {
+    const stories = getStoriesRef();
+    for (const d of stories) {
+      const obj = d.__obj;
+      if (!obj) continue;
+
+      // obj.position is in globe/world coords, globe centered at origin
+      const pos = obj.position;
+      const lenSq = pos.x * pos.x + pos.y * pos.y + pos.z * pos.z;
+      if (lenSq < 1e-10) continue;
+
+      // outward normal (head up)
+      const n = pos.clone().normalize();
+
+      // rotate group so local +Y aligns with normal
+      obj.quaternion.setFromUnitVectors(Y, n);
     }
 
-    const baseLat = arr[0].pin_lat;
-    const baseLon = arr[0].pin_lon;
-    const n = arr.length;
+    raf = requestAnimationFrame(tick);
+  };
 
-    arr.forEach((s, i) => {
-      const angle = (i / n) * Math.PI * 2;
-      const dLat = jitterDeg * Math.cos(angle);
-      const dLon =
-        (jitterDeg * Math.sin(angle)) /
-        Math.max(0.2, Math.cos((baseLat * Math.PI) / 180));
+  raf = requestAnimationFrame(tick);
+  return () => cancelAnimationFrame(raf);
+}
 
-      out.push({
-        ...s,
-        pin_lat: baseLat + dLat,
-        pin_lon: baseLon + dLon,
-      });
-    });
-  }
+/** =========================
+ *  Spiderfy (stories-only)
+ *  ========================= */
 
-  return out;
+const SPIDER_RADIUS_DEG = 0.18;
+const SPIDER_STEP_DEG_BASE = 0.07;
+
+function approxDistDeg(aLat, aLng, bLat, bLng) {
+  const lonScale = Math.max(0.25, Math.cos((aLat * Math.PI) / 180));
+  const dLat = aLat - bLat;
+  const dLng = (aLng - bLng) * lonScale;
+  return Math.hypot(dLat, dLng);
+}
+
+function spiderStepDeg(globe) {
+  const alt = globe.pointOfView()?.altitude ?? 1.2;
+  return SPIDER_STEP_DEG_BASE * (0.8 + alt / 1.4);
+}
+
+function collapseSpider(allStories) {
+  return allStories.map((s) => ({
+    ...s,
+    __lat: s.pin_lat,
+    __lng: s.pin_lon,
+    __spider: false,
+    __spiderKey: null,
+  }));
+}
+
+function spiderfyAround(globe, clicked, allStories) {
+  const baseLat = clicked.pin_lat;
+  const baseLng = clicked.pin_lon;
+
+  const group = allStories
+    .map((s) => ({ s, d: approxDistDeg(baseLat, baseLng, s.pin_lat, s.pin_lon) }))
+    .filter((x) => x.d < SPIDER_RADIUS_DEG)
+    .sort((a, b) => a.d - b.d)
+    .map((x) => x.s);
+
+  if (group.length <= 1) return { didSpider: false, stories: allStories, group: [] };
+
+  const golden = Math.PI * (3 - Math.sqrt(5));
+  const step = spiderStepDeg(globe);
+  const lonScale = Math.max(0.25, Math.cos((baseLat * Math.PI) / 180));
+  const ids = new Set(group.map((s) => s.id));
+
+  const next = allStories.map((s) => {
+    if (!ids.has(s.id)) {
+      return { ...s, __lat: s.pin_lat, __lng: s.pin_lon, __spider: false, __spiderKey: null };
+    }
+    const i = group.findIndex((g) => g.id === s.id);
+    const r = step * Math.sqrt(i + 0.2);
+    const a = i * golden;
+
+    return {
+      ...s,
+      __lat: baseLat + r * Math.cos(a),
+      __lng: baseLng + (r * Math.sin(a)) / lonScale,
+      __spider: true,
+      __spiderKey: "1",
+    };
+  });
+
+  return { didSpider: true, stories: next, group };
 }
 
 /** =========================
@@ -416,6 +551,8 @@ function jitterDuplicatesByLatLng(stories, jitterDeg = 0.10) {
  *  ========================= */
 
 export async function mountSignGlobe({ containerId = "sign-globe", height = 650 } = {}) {
+  console.log("MOUNT RUNNING ✅");
+
   const container = document.getElementById(containerId);
   if (!container) throw new Error(`Missing #${containerId}`);
 
@@ -423,71 +560,138 @@ export async function mountSignGlobe({ containerId = "sign-globe", height = 650 
   container.style.height = typeof height === "number" ? `${height}px` : height;
   container.style.width = "100%";
   container.style.touchAction = "none";
-
-  // Prevent scroll/trackpad gestures from stealing drag when over the globe
   container.addEventListener("wheel", (e) => e.preventDefault(), { passive: false });
 
   const globe = Globe()(container)
     .globeImageUrl("https://unpkg.com/three-globe/example/img/earth-blue-marble.jpg")
     .backgroundColor("rgba(0,0,0,0)");
 
-  if (typeof globe.enablePointerInteraction === "function") {
-    globe.enablePointerInteraction(true);
-  }
+  if (typeof globe.enablePointerInteraction === "function") globe.enablePointerInteraction(true);
 
+  // Controls
   const controls = globe.controls();
-  controls.enabled = true;
-  controls.enableRotate = true;
-  controls.enableZoom = true;
   controls.enablePan = false;
   controls.enableDamping = true;
   controls.dampingFactor = 0.08;
 
-  // very slow always-on rotation
+  // Always rotate (a bit faster)
   controls.autoRotate = true;
-  controls.autoRotateSpeed = 0.06; // slower = smaller number (try 0.02–0.08)
+  controls.autoRotateSpeed = 0.2;
 
-  globe.scene().add(new THREE.AmbientLight(0xffffff, 0.9));
-  const dir = new THREE.DirectionalLight(0xffffff, 0.9);
+  // Lights
+  globe.scene().add(new THREE.AmbientLight(0xffffff, 0.95));
+  const dir = new THREE.DirectionalLight(0xffffff, 0.85);
   dir.position.set(1, 1, 1);
   globe.scene().add(dir);
 
+  // UI
   const panel = makePanel(container);
   disableBlockingOverlays(container);
 
+  // Data
   const storiesRaw = await loadStoriesFromGoogleSheet();
-  const stories = jitterDuplicatesByLatLng(storiesRaw, 0.10);
+  console.log("STORIES LOADED ✅", storiesRaw.length, storiesRaw[0]);
 
-  let lastHoveredSprite = null;
+  // Mutable stories array includes display coords
+  let stories = storiesRaw.map((s) => ({
+    ...s,
+    __lat: s.pin_lat,
+    __lng: s.pin_lon,
+    __spider: false,
+    __spiderKey: null,
+  }));
+
+  // Pin size
+  const PIN_SCALE = 6.0;
+
+  // Hover tracking
+  let lastHovered = null;
 
   globe
     .objectsData(stories)
-    .objectLat((d) => d.pin_lat)
-    .objectLng((d) => d.pin_lon)
-    .objectAltitude(0.04) // tiny lift to avoid z-fighting, but tip still anchors visually
+    .objectLat((d) => d.__lat)
+    .objectLng((d) => d.__lng)
+    // ✅ tiny altitude: avoids parallax "floating"
+    .objectAltitude(0.002)
     .objectThreeObject((d) => {
-      const sprite = makePinSprite();
-
-      // store reference for hover/click
-      d.__pinSprite = sprite;
-      return sprite;
+      const obj = makePinObject({ scale: PIN_SCALE });
+      d.__obj = obj;
+      return obj;
     })
     .onObjectHover((d) => {
-      if (lastHoveredSprite && (!d || d.__pinSprite !== lastHoveredSprite)) {
-        setPinGlow(lastHoveredSprite, false);
-        lastHoveredSprite = null;
-      }
-      if (d && d.__pinSprite) {
-        setPinGlow(d.__pinSprite, true);
-        lastHoveredSprite = d.__pinSprite;
+      if (lastHovered && lastHovered !== d) setHover(lastHovered.__obj, false);
+
+      if (d && d.__obj) {
+        setHover(d.__obj, true);
+        lastHovered = d;
+      } else {
+        lastHovered = null;
       }
     })
     .onObjectClick((d) => {
       if (!d) return;
-      panel.open(d);
-      if (d.__pinSprite) bouncePin(d.__pinSprite);
+
+      // If not spiderfied yet, attempt spiderfy around clicked point
+      if (!d.__spider) {
+        const { didSpider, stories: nextStories, group } = spiderfyAround(globe, d, stories);
+        if (didSpider) {
+          stories = nextStories;
+          globe.objectsData(stories);
+
+          panel.showCluster({
+            title: `${group.length} stories here`,
+            meta: d.country || "",
+            items: group,
+            onPick: (story) => {
+              const live = stories.find((x) => x.id === story.id) || story;
+              panel.showStory(live);
+              if (live.__obj) bounce(live.__obj);
+            },
+            onHover: (story, on) => {
+              const live = stories.find((x) => x.id === story.id);
+              if (live?.__obj) setHover(live.__obj, on);
+            },
+          });
+
+          return;
+        }
+      }
+
+      // Otherwise open directly
+      panel.showStory(d);
+      if (d.__obj) bounce(d.__obj);
     });
 
-  console.log("Globe mounted. Pins:", stories.length);
+  // Start per-frame anchoring: head up, tip down
+  const stopAnchoring = startPinAnchoring(globe, () => stories);
+
+  // Collapse spider on background click
+  const collapse = () => {
+    const anySpider = stories.some((s) => s.__spider);
+    if (!anySpider) return;
+    stories = collapseSpider(stories);
+    globe.objectsData(stories);
+  };
+
+  if (typeof globe.onGlobeClick === "function") {
+    globe.onGlobeClick(() => collapse());
+  } else {
+    container.addEventListener("pointerdown", () => {
+      if (!lastHovered) collapse();
+    });
+  }
+
+  window.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") collapse();
+  });
+
+  console.log("Globe mounted. Stories:", stories.length);
+
+  globe.__signCleanup = () => {
+    try {
+      stopAnchoring?.();
+    } catch {}
+  };
+
   return globe;
 }
