@@ -2,7 +2,7 @@
 import Globe from "globe.gl";
 import * as THREE from "three";
 
-console.log("SIGN GLOBE BUILD:", "2026-02-03 teardrop-plane-spiderfy-anchored-FULL-v1");
+console.log("SIGN GLOBE BUILD:", "2026-02-04 borders-nonblocking-v1");
 
 /**
  * Reads your Google Sheet (published to web).
@@ -144,7 +144,7 @@ function makePanel(container) {
         "
       ></div>
       <div style="margin-top:10px; opacity:.7; font-size:12px;">
-        Tip: click a pin in the ring or select from this list.
+        Tip: Select from this list.
       </div>
     </div>
 
@@ -189,6 +189,7 @@ function makePanel(container) {
   const srcEl = panel.querySelector("#sg-src");
 
   panel.querySelector("#sg-close").onclick = () => (panel.style.display = "none");
+
   const show = () => (panel.style.display = "block");
 
   function showStory(story) {
@@ -226,6 +227,7 @@ function makePanel(container) {
     clusterWrap.style.display = "block";
 
     listEl.innerHTML = "";
+
     items.forEach((s) => {
       const row = document.createElement("button");
       row.type = "button";
@@ -249,9 +251,11 @@ function makePanel(container) {
           ${escapeHtml(s.country || "")}
         </div>
       `;
+
       row.onmouseenter = () => onHover?.(s, true);
       row.onmouseleave = () => onHover?.(s, false);
       row.onclick = () => onPick?.(s);
+
       listEl.appendChild(row);
     });
 
@@ -290,13 +294,14 @@ function disableBlockingOverlays(container) {
 }
 
 /** =========================
- *  Pin texture (teardrop) — FULL SOLID INTERIOR
- *  Key trick: stroke first, then clip-fill so outline never "eats" the green.
- *  Also disable mipmaps to avoid weird edge blending.
+ *  Pin texture (teardrop) — eliminates "unfilled crescent"
+ *  Trick: after stroking, paint a slightly smaller GREEN head circle to cover the inner stroke,
+ *  then paint the white dot.
  *  ========================= */
 
 const SIGN_GREEN = "#81BC41";
 const SIGN_OUTLINE = "#2d6a1f";
+
 function makePinTexture({ w = 256, h = 384 } = {}) {
   const canvas = document.createElement("canvas");
   canvas.width = w;
@@ -307,11 +312,13 @@ function makePinTexture({ w = 256, h = 384 } = {}) {
 
   const cx = w / 2;
   const cy = h * 0.33;
-  const r  = w * 0.22;
+  const r = w * 0.22;
   const tipY = h * 0.94;
 
+  // Teardrop path
   const path = new Path2D();
   path.arc(cx, cy, r, 0, Math.PI * 2);
+
   path.moveTo(cx - r * 0.95, cy + r * 0.10);
   path.bezierCurveTo(
     cx - r * 1.35, cy + r * 1.05,
@@ -325,11 +332,11 @@ function makePinTexture({ w = 256, h = 384 } = {}) {
   );
   path.closePath();
 
-  // 1) Fill solid green
+  // 1) Solid fill
   ctx.fillStyle = SIGN_GREEN;
   ctx.fill(path);
 
-  // 2) Stroke outline
+  // 2) Outline
   const lw = w * 0.05;
   ctx.lineWidth = lw;
   ctx.strokeStyle = SIGN_OUTLINE;
@@ -337,13 +344,13 @@ function makePinTexture({ w = 256, h = 384 } = {}) {
   ctx.lineCap = "round";
   ctx.stroke(path);
 
-  // ✅ 3) COVER the inside part of the head outline (removes the “crescent”)
+  // 3) Cover the inner half of the outline on the head (removes "crescent" look)
   ctx.fillStyle = SIGN_GREEN;
   ctx.beginPath();
-  ctx.arc(cx, cy, r - lw * 0.65, 0, Math.PI * 2);
+  ctx.arc(cx, cy, Math.max(1, r - lw * 0.70), 0, Math.PI * 2);
   ctx.fill();
 
-  // 4) White dot last
+  // 4) White dot
   ctx.fillStyle = "#fff";
   ctx.beginPath();
   ctx.arc(cx, cy, r * 0.45, 0, Math.PI * 2);
@@ -358,59 +365,59 @@ function makePinTexture({ w = 256, h = 384 } = {}) {
   return tex;
 }
 
-
-// DEV: no cache to guarantee updates show. (You can cache later.)
+// DEV: no cache so you always see texture edits
 function getPinTexture() {
   return makePinTexture();
 }
 
 /** =========================
- *  Teardrop plane pin (NOT a sprite)
+ *  Teardrop plane pin (NOT sprite)
  *  - tip anchored at group origin
- *  - head up, tip down (we orient group to globe normal)
+ *  - IMPORTANT: no plane local Z offsets (those can push into the globe after rotation)
  *  ========================= */
-
 function makePinObject({ scale = 6.0 } = {}) {
   const group = new THREE.Group();
-
-  const mat = new THREE.MeshBasicMaterial({
-    map: getPinTexture(),
-  
-    // ✅ key: do NOT blend semi-transparent pixels with the globe
-    transparent: false,
-  
-    // ✅ punch out the background of the texture
-    alphaTest: 0.25,
-  
-    depthTest: true,
-    depthWrite: false,
-    side: THREE.DoubleSide,
-    polygonOffset: true,
-    polygonOffsetFactor: -4,
-    polygonOffsetUnits: -4,
-  });
-  
 
   const w = scale;
   const h = scale * 1.42;
 
+  const mat = new THREE.MeshBasicMaterial({
+    map: getPinTexture(),
+
+    // Keep edges crisp but not see-through
+    transparent: false,
+    alphaTest: 0.25,
+
+    // ✅ Pins win depth so borders can’t draw over them
+    depthTest: true,
+    depthWrite: true,
+
+    side: THREE.DoubleSide,
+
+    // ✅ Prevent z-fighting vs globe/borders
+    polygonOffset: true,
+    polygonOffsetFactor: -10,
+    polygonOffsetUnits: -10,
+  });
+
   const plane = new THREE.Mesh(new THREE.PlaneGeometry(w, h), mat);
 
-  // Tip anchored at group origin
+  // tip anchored at group origin
   plane.position.y = h * 0.5;
+  plane.position.z = 0;
 
-  // Small lift away from globe surface (prevents intersection)
-  plane.position.z = 0.00;
-
+  // ✅ Draw after polygons (secondary safeguard)
+  plane.renderOrder = 999;
   plane.frustumCulled = false;
+
   group.add(plane);
 
-  // Small invisible hit target near tip
   const hit = new THREE.Mesh(
     new THREE.SphereGeometry(scale * 0.14, 10, 10),
     new THREE.MeshBasicMaterial({ transparent: true, opacity: 0 })
   );
   hit.position.set(0, scale * 0.18, 0);
+  hit.renderOrder = 0;
   group.add(hit);
 
   group.userData.plane = plane;
@@ -418,6 +425,7 @@ function makePinObject({ scale = 6.0 } = {}) {
 
   return group;
 }
+
 
 function setHover(group, on) {
   const plane = group?.userData?.plane;
@@ -445,10 +453,9 @@ function bounce(group) {
 }
 
 /** =========================
- *  Per-frame anchoring (VERTICAL PIN)
- *  - Round head UP (away from center)
- *  - Tip DOWN (toward center)
- *  - No camera billboarding (keeps consistent "map pin" look)
+ *  Per-frame anchoring (vertical pin)
+ *  - head up (away from center)
+ *  - tip down (toward center)
  *  ========================= */
 
 function startPinAnchoring(globe, getStoriesRef) {
@@ -461,15 +468,11 @@ function startPinAnchoring(globe, getStoriesRef) {
       const obj = d.__obj;
       if (!obj) continue;
 
-      // obj.position is in globe/world coords, globe centered at origin
       const pos = obj.position;
       const lenSq = pos.x * pos.x + pos.y * pos.y + pos.z * pos.z;
       if (lenSq < 1e-10) continue;
 
-      // outward normal (head up)
       const n = pos.clone().normalize();
-
-      // rotate group so local +Y aligns with normal
       obj.quaternion.setFromUnitVectors(Y, n);
     }
 
@@ -566,6 +569,52 @@ export async function mountSignGlobe({ containerId = "sign-globe", height = 650 
     .globeImageUrl("https://unpkg.com/three-globe/example/img/earth-blue-marble.jpg")
     .backgroundColor("rgba(0,0,0,0)");
 
+// =========================
+// Country borders + hover labels (cartoon style)
+// NON-BLOCKING: pins will still load if this fails
+// =========================let hoveredCountry = null;
+let hoveredCountry = null;
+
+fetch("./data/countries.geojson")
+  .then((r) => {
+    if (!r.ok) throw new Error(`countries.geojson ${r.status}`);
+    return r.json();
+  })
+  .then((geo) => {
+    globe
+      .polygonsData(geo.features)
+
+      // Thickness via altitude (still below pins)
+      .polygonAltitude((d) =>
+        d === hoveredCountry ? 0.0032 : 0.0026
+      )
+
+      .polygonCapColor(() => "rgba(0,0,0,0)")
+      .polygonSideColor(() => "rgba(0,0,0,0)")
+
+      // 🔥 DARK GREY borders
+      .polygonStrokeColor((d) =>
+        d === hoveredCountry
+          ? "rgba(90,90,90,1.0)"     // hover: darker
+          : "rgba(120,120,120,0.95)" // normal
+      )
+
+      .polygonLabel((d) =>
+        d?.properties?.ADMIN || d?.properties?.name || ""
+      )
+
+      .onPolygonHover((d) => {
+        hoveredCountry = d;
+      });
+
+    console.log("Country borders loaded:", geo.features.length);
+  })
+  .catch((err) => {
+    console.warn("Country borders not loaded:", err);
+  });
+
+
+
   if (typeof globe.enablePointerInteraction === "function") globe.enablePointerInteraction(true);
 
   // Controls
@@ -574,7 +623,7 @@ export async function mountSignGlobe({ containerId = "sign-globe", height = 650 
   controls.enableDamping = true;
   controls.dampingFactor = 0.08;
 
-  // Always rotate (a bit faster)
+  // Slow rotate
   controls.autoRotate = true;
   controls.autoRotateSpeed = 0.2;
 
@@ -611,8 +660,8 @@ export async function mountSignGlobe({ containerId = "sign-globe", height = 650 
     .objectsData(stories)
     .objectLat((d) => d.__lat)
     .objectLng((d) => d.__lng)
-    // ✅ tiny altitude: avoids parallax "floating"
-    .objectAltitude(0.002)
+    // Slightly above surface to prevent "embedded tip"
+    .objectAltitude(0.015)
     .objectThreeObject((d) => {
       const obj = makePinObject({ scale: PIN_SCALE });
       d.__obj = obj;
@@ -662,7 +711,7 @@ export async function mountSignGlobe({ containerId = "sign-globe", height = 650 
       if (d.__obj) bounce(d.__obj);
     });
 
-  // Start per-frame anchoring: head up, tip down
+  // Start per-frame anchoring
   const stopAnchoring = startPinAnchoring(globe, () => stories);
 
   // Collapse spider on background click
