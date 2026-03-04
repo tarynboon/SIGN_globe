@@ -123,7 +123,7 @@ function escapeHtml(s) {
     .replaceAll("'", "&#039;");
 }
 
-function makePanel(container, { onClose } = {}) {
+function makePanel(container, { onClose, onOpen } = {}) {
   const panel = document.createElement("div");
   panel.dataset.sgPanel = "1";
 
@@ -212,7 +212,7 @@ function makePanel(container, { onClose } = {}) {
 
   panel.querySelector("#sg-close").onclick = () => { panel.style.display = "none"; onClose?.(); };
 
-  const show = () => (panel.style.display = "block");
+  const show = () => { panel.style.display = "block"; onOpen?.(); };
 
   function showStory(story) {
     titleEl.textContent = story.title || "";
@@ -666,7 +666,11 @@ export async function mountSignGlobe({ containerId = "sign-globe", height = 650 
   container.style.height = typeof height === "number" ? `${height}px` : height;
   container.style.width = "100%";
   container.style.touchAction = "none";
-  container.addEventListener("wheel", (e) => e.preventDefault(), { passive: false });
+  container.addEventListener("wheel", (e) => {
+    // Allow wheel scrolling inside the story panel
+    if (e.target.closest('[data-sg-panel="1"]')) return;
+    e.preventDefault();
+  }, { passive: false });
 
   const globe = Globe()(container)
     .globeImageUrl("https://unpkg.com/three-globe/example/img/earth-blue-marble.jpg")
@@ -703,8 +707,17 @@ const geojsonPromise = fetch("./data/countries.geojson")
   dir.position.set(1, 1, 1);
   globe.scene().add(dir);
 
-  // UI — resume auto-rotate when the panel is closed
-  const panel = makePanel(container, { onClose: () => { controls.autoRotate = true; } });
+  // UI — resume auto-rotate + show toggle buttons when the panel is closed
+  let toggleWrap;
+  const panel = makePanel(container, {
+    onClose: () => {
+      controls.autoRotate = true;
+      if (toggleWrap) toggleWrap.style.display = "flex";
+    },
+    onOpen: () => {
+      if (window.innerWidth < 768 && toggleWrap) toggleWrap.style.display = "none";
+    },
+  });
   disableBlockingOverlays(container);
 
   // Load geojson + sheet data in parallel
@@ -845,7 +858,7 @@ const geojsonPromise = fetch("./data/countries.geojson")
   });
 
   // Layer toggle UI
-  const toggleWrap = document.createElement("div");
+  toggleWrap = document.createElement("div");
   toggleWrap.dataset.sgUi = "1";
   toggleWrap.style.cssText = `
     position: absolute;
