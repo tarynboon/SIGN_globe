@@ -301,6 +301,7 @@ function disableBlockingOverlays(container) {
 
     const overlays = Array.from(container.querySelectorAll("div")).filter((el) => {
       if (el.dataset.sgPanel === "1") return false;
+      if (el.dataset.sgUi === "1") return false;
       const cs = getComputedStyle(el);
       return cs.position === "absolute";
     });
@@ -840,6 +841,7 @@ const geojsonPromise = fetch("./data/countries.geojson")
 
   // Layer toggle UI
   const toggleWrap = document.createElement("div");
+  toggleWrap.dataset.sgUi = "1";
   toggleWrap.style.cssText = `
     position: absolute;
     bottom: 16px;
@@ -856,7 +858,7 @@ const geojsonPromise = fetch("./data/countries.geojson")
     let on = defaultOn;
     const update = () => {
       btn.style.cssText = `
-        padding: 6px 14px;
+        padding: 10px 20px;
         border-radius: 20px;
         border: 2px solid ${color};
         background: ${on ? color : "rgba(255,255,255,0.85)"};
