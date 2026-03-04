@@ -187,8 +187,11 @@ function makePanel(container, { onClose } = {}) {
         "
       ></div>
 
-      <div style="margin-top:10px;">
-        <a id="sg-src" href="#" target="_blank" rel="noopener" style="display:none;">Read more</a>
+      <div style="margin-top:14px;">
+        <a id="sg-src" href="#" target="_blank" rel="noopener"
+          style="display:none; padding:9px 18px; background:#81BC41; color:#fff;
+            border-radius:8px; font-weight:700; font-size:14px; text-decoration:none;
+            letter-spacing:0.01em;">Read on SIGN</a>
       </div>
     </div>
   `;
@@ -481,13 +484,13 @@ function makePinObject({ scale = 6.0 } = {}) {
 
   group.add(plane);
 
-  // Invisible hit sphere positioned at the pin head (circle) center.
-  // Head center in texture is ~33% from top → ~67% up the plane height.
+  // Invisible hit volume covering the full pin body (tip to head).
+  const pinH = h; // same as plane height
   const hit = new THREE.Mesh(
-    new THREE.SphereGeometry(scale * 0.28, 10, 10),
+    new THREE.CylinderGeometry(scale * 0.32, scale * 0.18, pinH, 12),
     new THREE.MeshBasicMaterial({ transparent: true, opacity: 0 })
   );
-  hit.position.set(0, scale * 0.95, 0);
+  hit.position.set(0, pinH * 0.5, 0); // centered along pin body
   hit.renderOrder = 0;
   group.add(hit);
 
