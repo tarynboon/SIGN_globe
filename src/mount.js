@@ -212,7 +212,21 @@ function makePanel(container, { onClose, onOpen } = {}) {
 
   panel.querySelector("#sg-close").onclick = () => { panel.style.display = "none"; onClose?.(); };
 
-  const show = () => { panel.style.display = "block"; onOpen?.(); };
+  const show = () => {
+    panel.style.display = "block";
+    if (window.innerWidth < 768) {
+      panel.style.left = "4%";
+      panel.style.right = "4%";
+      panel.style.width = "auto";
+      panel.style.top = "12px";
+    } else {
+      panel.style.left = "";
+      panel.style.right = "16px";
+      panel.style.width = "min(420px, 92%)";
+      panel.style.top = "16px";
+    }
+    onOpen?.();
+  };
 
   function showStory(story) {
     titleEl.textContent = story.title || "";
