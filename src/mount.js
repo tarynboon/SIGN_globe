@@ -320,7 +320,7 @@ function disableBlockingOverlays(container) {
  *  Program ring marker — flat circle on globe surface
  *  ========================= */
 
-const SIGN_BLUE = "#2E86AB";
+const SIGN_BLUE = "#F99F1E";
 
 function makeProgramMarker({ scale = 5.0 } = {}) {
   const group = new THREE.Group();
@@ -731,7 +731,7 @@ const geojsonPromise = fetch("./data/countries.geojson")
   );
   const programCapColor = (d) => {
     const name = (d.properties?.ADMIN || d.properties?.name || "").toLowerCase().trim();
-    return programCountries.has(name) ? "rgba(46,134,171,0.45)" : "rgba(0,0,0,0)";
+    return programCountries.has(name) ? "rgba(249,159,30,0.7)" : "rgba(0,0,0,0)";
   };
   if (geo) {
     globe
