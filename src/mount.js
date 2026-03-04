@@ -475,14 +475,19 @@ function makePinObject({ scale = 6.0 } = {}) {
   // ✅ Draw after polygons (secondary safeguard)
   plane.renderOrder = 999;
   plane.frustumCulled = false;
+  // Disable raycasting on the plane — its full rectangle registers clicks
+  // in transparent areas, causing the hit zone to be offset from the visual pin.
+  plane.raycast = () => {};
 
   group.add(plane);
 
+  // Invisible hit sphere positioned at the pin head (circle) center.
+  // Head center in texture is ~33% from top → ~67% up the plane height.
   const hit = new THREE.Mesh(
-    new THREE.SphereGeometry(scale * 0.14, 10, 10),
+    new THREE.SphereGeometry(scale * 0.28, 10, 10),
     new THREE.MeshBasicMaterial({ transparent: true, opacity: 0 })
   );
-  hit.position.set(0, scale * 0.18, 0);
+  hit.position.set(0, scale * 0.95, 0);
   hit.renderOrder = 0;
   group.add(hit);
 
