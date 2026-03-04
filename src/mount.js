@@ -184,9 +184,6 @@ function makePanel(container, { onClose } = {}) {
         style="
           margin-top:10px;
           line-height:1.45;
-          max-height:35vh;
-          overflow-y:auto;
-          padding-right:6px;
         "
       ></div>
 
