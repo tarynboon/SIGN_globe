@@ -670,7 +670,11 @@ function clusterStories(stories) {
  *  Mount
  *  ========================= */
 
-export async function mountSignGlobe({ containerId = "sign-globe", height = 650 } = {}) {
+export async function mountSignGlobe({
+  containerId = "sign-globe",
+  height = 650,
+  geojsonUrl = "https://tarynboon.github.io/SIGN_globe/data/countries.geojson",
+} = {}) {
   console.log("MOUNT RUNNING ✅");
 
   const container = document.getElementById(containerId);
@@ -695,7 +699,7 @@ export async function mountSignGlobe({ containerId = "sign-globe", height = 650 
 // =========================
 let hoveredCountry = null;
 
-const geojsonPromise = fetch("./data/countries.geojson")
+const geojsonPromise = fetch(geojsonUrl)
   .then((r) => { if (!r.ok) throw new Error(`countries.geojson ${r.status}`); return r.json(); })
   .catch((err) => { console.warn("Country borders not loaded:", err); return null; });
 
