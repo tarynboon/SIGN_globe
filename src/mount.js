@@ -729,7 +729,7 @@ const geojsonPromise = fetch("./data/countries.geojson")
       if (toggleWrap) toggleWrap.style.display = "flex";
     },
     onOpen: () => {
-      if (window.innerWidth < 768 && toggleWrap) toggleWrap.style.display = "none";
+      if (toggleWrap) toggleWrap.style.display = "none";
     },
   });
   disableBlockingOverlays(container);
