@@ -25,13 +25,25 @@ async function loadSheetData() {
   if (start === -1 || end === -1) throw new Error("Could not parse Google Sheet response.");
 
   const json = JSON.parse(text.slice(start, end + 1));
-  const colsRaw = (json.table.cols || []).map((c) => (c.label ?? ""));
+  let colsRaw = (json.table.cols || []).map((c) => (c.label ?? ""));
+  const allRows = json.table.rows || [];
+
+  // If all column labels are empty, the API didn't pick up the header row —
+  // treat the first data row as the header instead.
+  let dataRows = allRows;
+  if (colsRaw.every((l) => l === "") && allRows.length > 0) {
+    colsRaw = (allRows[0].c || []).map((cell, i) =>
+      cell && cell.v != null ? String(cell.v) : `col${i}`
+    );
+    dataRows = allRows.slice(1);
+  }
+
   const cols = colsRaw.map((s) => s.trim().toLowerCase());
-  const rows = json.table.rows || [];
 
-  console.log("Sheet headers:", colsRaw);
+  console.log("Sheet headers (raw):", JSON.stringify(colsRaw));
+  console.log("Sheet headers (normalized):", JSON.stringify(cols));
 
-  const raw = rows.map((r) => {
+  const raw = dataRows.map((r) => {
     const obj = {};
     (r.c || []).forEach((cell, i) => { obj[cols[i]] = cell ? cell.v : null; });
     return obj;
@@ -61,22 +73,24 @@ async function loadSheetData() {
     const lonRaw = get(d, "pin_lon", "pin_lon (num)", "pin lon", "lon", "lng", "longitude");
     const lat = toNum(latRaw);
     const lon = toNum(lonRaw);
-    if (!Number.isFinite(lat) || !Number.isFinite(lon)) return;
+    const hasCoords = Number.isFinite(lat) && Number.isFinite(lon);
 
     const progLoc = get(d, "all_prog_locs", "all prog locs");
     const storyHtml = get(d, "story_html", "story html");
 
-    // Row is a program location if all_prog_locs is filled in
+    // Row is a program location — capture even without coords (will geocode by country name)
     if (progLoc) {
       programs.push({
-        pin_lat: lat,
-        pin_lon: lon,
+        pin_lat: hasCoords ? lat : null,
+        pin_lon: hasCoords ? lon : null,
         name: String(progLoc),
         country: String(get(d, "country") ?? ""),
       });
     }
 
-    // Row is a story if story_html is filled in
+    // Row is a story — requires valid coords
+    if (!hasCoords) return;
+
     if (storyHtml) {
       stories.push({
         id: String(get(d, "id") ?? ""),
@@ -109,7 +123,7 @@ function escapeHtml(s) {
     .replaceAll("'", "&#039;");
 }
 
-function makePanel(container) {
+function makePanel(container, { onClose } = {}) {
   const panel = document.createElement("div");
   panel.dataset.sgPanel = "1";
 
@@ -196,7 +210,7 @@ function makePanel(container) {
   const imgEl = panel.querySelector("#sg-img");
   const srcEl = panel.querySelector("#sg-src");
 
-  panel.querySelector("#sg-close").onclick = () => (panel.style.display = "none");
+  panel.querySelector("#sg-close").onclick = () => { panel.style.display = "none"; onClose?.(); };
 
   const show = () => (panel.style.display = "block");
 
@@ -544,6 +558,29 @@ function startPinAnchoring(globe, getPinsRef) {
  *  Pre-clusters overlapping pins into single pins
  *  ========================= */
 
+/** Build a country-name → centroid lookup from a GeoJSON FeatureCollection */
+function buildCountryCentroids(geo) {
+  const map = {};
+  (geo.features || []).forEach((f) => {
+    const name = (f.properties?.ADMIN || f.properties?.name || "").toLowerCase().trim();
+    if (!name) return;
+    const geom = f.geometry;
+    let ring;
+    if (geom.type === "MultiPolygon") {
+      ring = geom.coordinates.reduce(
+        (best, poly) => (poly[0].length > best.length ? poly[0] : best),
+        geom.coordinates[0][0]
+      );
+    } else {
+      ring = geom.coordinates[0];
+    }
+    let sumLat = 0, sumLon = 0;
+    for (const [lon, lat] of ring) { sumLon += lon; sumLat += lat; }
+    map[name] = { lat: sumLat / ring.length, lon: sumLon / ring.length };
+  });
+  return map;
+}
+
 function approxDistDeg(aLat, aLng, bLat, bLng) {
   const lonScale = Math.max(0.25, Math.cos((aLat * Math.PI) / 180));
   const dLat = aLat - bLat;
@@ -552,65 +589,61 @@ function approxDistDeg(aLat, aLng, bLat, bLng) {
 }
 
 /**
- * Positions pins with collision avoidance using iterative relaxation
- * Ensures minimum spacing between ALL pins
+ * Groups nearby stories into cluster pins, then spaces them apart.
+ * Returns [{ lat, lng, stories: [...] }]
  */
 function clusterStories(stories) {
   if (stories.length === 0) return [];
 
-  const MIN_SPACING_DEG = 0.5; // Minimum spacing between pin centers
-  const MAX_ITERATIONS = 50; // Max iterations for collision resolution
+  const CLUSTER_THRESH_DEG = 1.0; // stories within ~110km share one pin
+  const MIN_SPACING_DEG = 3.5;    // minimum spacing between pins after relaxation
+  const MAX_ITERATIONS = 50;
 
-  // Start with original positions
-  const pins = stories.map((story) => ({
-    lat: story.pin_lat,
-    lng: story.pin_lon,
-    story: story,
-  }));
+  // Step 1: group nearby stories into clusters
+  const used = new Set();
+  const clusters = [];
+  for (let i = 0; i < stories.length; i++) {
+    if (used.has(i)) continue;
+    const group = [stories[i]];
+    used.add(i);
+    for (let j = i + 1; j < stories.length; j++) {
+      if (used.has(j)) continue;
+      if (approxDistDeg(stories[i].pin_lat, stories[i].pin_lon, stories[j].pin_lat, stories[j].pin_lon) < CLUSTER_THRESH_DEG) {
+        group.push(stories[j]);
+        used.add(j);
+      }
+    }
+    const lat = group.reduce((s, x) => s + x.pin_lat, 0) / group.length;
+    const lng = group.reduce((s, x) => s + x.pin_lon, 0) / group.length;
+    clusters.push({ lat, lng, stories: group });
+  }
 
-  // Iteratively resolve overlaps
+  // Step 2: spread clusters apart so pins don't visually overlap
   for (let iter = 0; iter < MAX_ITERATIONS; iter++) {
     let hadCollision = false;
-
-    // Check all pairs for overlap
-    for (let i = 0; i < pins.length; i++) {
-      for (let j = i + 1; j < pins.length; j++) {
-        const dist = approxDistDeg(pins[i].lat, pins[i].lng, pins[j].lat, pins[j].lng);
-
+    for (let i = 0; i < clusters.length; i++) {
+      for (let j = i + 1; j < clusters.length; j++) {
+        const dist = approxDistDeg(clusters[i].lat, clusters[i].lng, clusters[j].lat, clusters[j].lng);
         if (dist < MIN_SPACING_DEG && dist > 0.0001) {
           hadCollision = true;
-
-          // Push pins apart
-          const overlap = MIN_SPACING_DEG - dist;
-          const pushDist = overlap / 2;
-
-          // Calculate push direction
-          const lonScale = Math.max(0.25, Math.cos((pins[i].lat * Math.PI) / 180));
-          const dLat = pins[j].lat - pins[i].lat;
-          const dLng = (pins[j].lng - pins[i].lng) * lonScale;
+          const pushDist = (MIN_SPACING_DEG - dist) / 2;
+          const lonScale = Math.max(0.25, Math.cos((clusters[i].lat * Math.PI) / 180));
+          const dLat = clusters[j].lat - clusters[i].lat;
+          const dLng = (clusters[j].lng - clusters[i].lng) * lonScale;
           const len = Math.sqrt(dLat * dLat + dLng * dLng);
-
           if (len > 0.0001) {
-            const pushLat = (dLat / len) * pushDist;
-            const pushLng = (dLng / len) * pushDist / lonScale;
-
-            pins[i].lat -= pushLat;
-            pins[i].lng -= pushLng;
-            pins[j].lat += pushLat;
-            pins[j].lng += pushLng;
+            clusters[i].lat -= (dLat / len) * pushDist;
+            clusters[i].lng -= (dLng / len) * pushDist / lonScale;
+            clusters[j].lat += (dLat / len) * pushDist;
+            clusters[j].lng += (dLng / len) * pushDist / lonScale;
           }
         }
       }
     }
-
-    // If no collisions, we're done
-    if (!hadCollision) {
-      console.log(`Collision resolution converged in ${iter + 1} iterations`);
-      break;
-    }
+    if (!hadCollision) { console.log(`Cluster spacing converged in ${iter + 1} iterations`); break; }
   }
 
-  return pins;
+  return clusters;
 }
 
 /** =========================
@@ -634,48 +667,15 @@ export async function mountSignGlobe({ containerId = "sign-globe", height = 650 
     .backgroundColor("rgba(0,0,0,0)");
 
 // =========================
-// Country borders + hover labels (cartoon style)
-// NON-BLOCKING: pins will still load if this fails
+// Country borders + geocoding (shared geojson fetch)
 // =========================
 let hoveredCountry = null;
 
-fetch("./data/countries.geojson")
-  .then((r) => {
-    if (!r.ok) throw new Error(`countries.geojson ${r.status}`);
-    return r.json();
-  })
-  .then((geo) => {
-    globe
-      .polygonsData(geo.features)
+const geojsonPromise = fetch("./data/countries.geojson")
+  .then((r) => { if (!r.ok) throw new Error(`countries.geojson ${r.status}`); return r.json(); })
+  .catch((err) => { console.warn("Country borders not loaded:", err); return null; });
 
-      // Thickness via altitude (still below pins)
-      .polygonAltitude((d) =>
-        d === hoveredCountry ? 0.0032 : 0.0026
-      )
-
-      .polygonCapColor(() => "rgba(0,0,0,0)")
-      .polygonSideColor(() => "rgba(0,0,0,0)")
-
-      // 🔥 DARK GREY borders
-      .polygonStrokeColor((d) =>
-        d === hoveredCountry
-          ? "rgba(90,90,90,1.0)"     // hover: darker
-          : "rgba(120,120,120,0.95)" // normal
-      )
-
-      .polygonLabel((d) =>
-        d?.properties?.ADMIN || d?.properties?.name || ""
-      )
-
-      .onPolygonHover((d) => {
-        hoveredCountry = d;
-      });
-
-    console.log("Country borders loaded:", geo.features.length);
-  })
-  .catch((err) => {
-    console.warn("Country borders not loaded:", err);
-  });
+// Borders + program shading are set up after data loads (see below)
 
 
 
@@ -687,10 +687,9 @@ fetch("./data/countries.geojson")
   controls.enableDamping = true;
   controls.dampingFactor = 0.08;
 
-  // Slow rotate
+  // Slow rotate — pauses when a story panel is open, resumes on close
   controls.autoRotate = true;
-  controls.autoRotateSpeed = 0.03; // slower = smaller number (try 0.02–0.08)
-  controls.addEventListener("start", stopAutoRotateOnce);
+  controls.autoRotateSpeed = 0.03;
 
   // Lights
   globe.scene().add(new THREE.AmbientLight(0xffffff, 0.95));
@@ -698,16 +697,94 @@ fetch("./data/countries.geojson")
   dir.position.set(1, 1, 1);
   globe.scene().add(dir);
 
-  // UI
-  const panel = makePanel(container);
+  // UI — resume auto-rotate when the panel is closed
+  const panel = makePanel(container, { onClose: () => { controls.autoRotate = true; } });
   disableBlockingOverlays(container);
 
-  // Data
-  const { stories: storiesRaw, programs } = await loadSheetData();
-  console.log("STORIES LOADED ✅", storiesRaw.length, "PROGRAMS LOADED ✅", programs.length);
+  // Load geojson + sheet data in parallel
+  const [geo, { stories: storiesRaw, programs: programsRaw }] = await Promise.all([
+    geojsonPromise,
+    loadSheetData(),
+  ]);
+  console.log("STORIES LOADED", storiesRaw.length, "PROGRAMS RAW ✅", programsRaw.length);
+
+  // Geocode programs that have a country name but no coordinates
+  const centroids = geo ? buildCountryCentroids(geo) : {};
+  const programs = programsRaw
+    .map((p) => {
+      if (p.pin_lat !== null && p.pin_lon !== null) return p;
+      const c = centroids[p.country.toLowerCase().trim()];
+      return c ? { ...p, pin_lat: c.lat, pin_lon: c.lon } : p;
+    })
+    .filter((p) => Number.isFinite(p.pin_lat) && Number.isFinite(p.pin_lon));
+  console.log("PROGRAMS GEOCODED ✅", programs.length);
+
+  // Set up country borders + program shading (needs both geo and program list)
+  const programCountries = new Set(
+    programs.map((p) => p.country.toLowerCase().trim()).filter(Boolean)
+  );
+  const programCapColor = (d) => {
+    const name = (d.properties?.ADMIN || d.properties?.name || "").toLowerCase().trim();
+    return programCountries.has(name) ? "rgba(46,134,171,0.45)" : "rgba(0,0,0,0)";
+  };
+  if (geo) {
+    globe
+      .polygonsData(geo.features)
+      .polygonAltitude((d) => d === hoveredCountry ? 0.0032 : 0.0026)
+      .polygonCapColor(programCapColor)
+      .polygonSideColor(() => "rgba(0,0,0,0)")
+      .polygonStrokeColor((d) =>
+        d === hoveredCountry ? "rgba(90,90,90,1.0)" : "rgba(120,120,120,0.95)"
+      )
+      .polygonLabel((d) => d?.properties?.ADMIN || d?.properties?.name || "")
+      .onPolygonHover((d) => { hoveredCountry = d; });
+    console.log("Country borders + program shading loaded:", geo.features.length);
+
+    // Country name labels — visible when zoomed in (altitude < 1.5)
+    const countryLabels = geo.features
+      .map((f) => {
+        const name = f.properties?.ADMIN || f.properties?.name || "";
+        if (!name) return null;
+        const c = centroids[name.toLowerCase().trim()];
+        return c ? { name, lat: c.lat, lon: c.lon } : null;
+      })
+      .filter(Boolean);
+
+    globe
+      .htmlElementsData([])
+      .htmlLat((d) => d.lat)
+      .htmlLng((d) => d.lon)
+      .htmlAltitude(0.004)
+      .htmlElement((d) => {
+        const el = document.createElement("div");
+        el.textContent = d.name;
+        el.style.cssText = `
+          font-family: sans-serif;
+          font-size: 11px;
+          font-weight: 300;
+          color: rgba(255,255,255,0.92);
+          text-shadow: 0 1px 2px rgba(0,0,0,0.6);
+          pointer-events: none;
+          white-space: nowrap;
+          user-select: none;
+        `;
+        return el;
+      });
+
+    let labelsVisible = false;
+    controls.addEventListener("change", () => {
+      const { altitude } = globe.pointOfView();
+      const shouldShow = altitude < 1.5;
+      if (shouldShow !== labelsVisible) {
+        labelsVisible = shouldShow;
+        globe.htmlElementsData(shouldShow ? countryLabels : []);
+      }
+    });
+  }
 
   // Cluster nearby stories into non-overlapping pins
-  const pins = clusterStories(storiesRaw);
+  // Tag each pin with an index so we can give them unique altitudes (prevents z-fighting)
+  const pins = clusterStories(storiesRaw).map((p, i) => ({ ...p, _idx: i }));
   console.log(`Positioned ${storiesRaw.length} stories as ${pins.length} non-overlapping pins`);
 
   // Pin size
@@ -720,7 +797,7 @@ fetch("./data/countries.geojson")
     .objectsData(pins)
     .objectLat((d) => d.lat)
     .objectLng((d) => d.lng)
-    .objectAltitude(0.015)
+    .objectAltitude((d) => 0.015 + d._idx * 0.0005)
     .objectThreeObject((d) => {
       const obj = makePinObject({ scale: PIN_SCALE });
       d.__obj = obj;
@@ -735,77 +812,31 @@ fetch("./data/countries.geojson")
         lastHovered = null;
       }
     })
-    let autoRotateStopped = false;
-
-    function stopAutoRotateOnce() {
-      if (autoRotateStopped) return;
-      controls.autoRotate = false;
-      autoRotateStopped = true;
-    }
-
     .onObjectClick((d) => {
       if (!d) return;
-    
-      stopAutoRotateOnce();   // ✅ stop rotation on first pin click
-    
-      panel.open(d);
-      if (d.__pinSprite) bouncePin(d.__pinSprite);
-
-      // If not spiderfied yet, attempt spiderfy around clicked point
-      if (!d.__spider) {
-        const { didSpider, stories: nextStories, group } = spiderfyAround(globe, d, stories);
-        if (didSpider) {
-          stories = nextStories;
-          globe.objectsData(stories);
-
-          panel.showCluster({
-            title: `${group.length} stories here`,
-            meta: d.country || "",
-            items: group,
-            onPick: (story) => {
-              const live = stories.find((x) => x.id === story.id) || story;
-              panel.showStory(live);
-              if (live.__obj) bounce(live.__obj);
-            },
-            onHover: (story, on) => {
-              const live = stories.find((x) => x.id === story.id);
-              if (live?.__obj) setHover(live.__obj, on);
-            },
-          });
-
-          return;
-        }
-      }
-
-      // Otherwise open directly
-      panel.showStory(d);
       controls.autoRotate = false;
-      panel.showStory(d.story);
       if (d.__obj) bounce(d.__obj);
+      if (d.stories.length === 1) {
+        panel.showStory(d.stories[0]);
+      } else {
+        panel.showCluster({
+          title: `${d.stories.length} stories nearby`,
+          meta: d.stories[0]?.country || "",
+          items: d.stories,
+          onPick: (story) => panel.showStory(story),
+          onHover: () => {},
+        });
+      }
     });
-    
 
-  // Program rings layer (globe.gl custom layer via rings data)
-  globe
-    .ringsData(programs)
-    .ringLat((d) => d.pin_lat)
-    .ringLng((d) => d.pin_lon)
-    .ringColor(() => SIGN_BLUE)
-    .ringMaxRadius(1.2)
-    .ringPropagationSpeed(0)
-    .ringRepeatPeriod(0)
-    .onRingClick((d) => {
-      if (!d) return;
-      controls.autoRotate = false;
-      // Show a simple info tooltip for program locations
-      panel.showStory({
-        title: d.name || "Program Location",
-        country: d.country || "",
-        story_html: `<p>IGN has an active program in <strong>${d.country || d.name}</strong>.</p>`,
-        image_url: "",
-        source_url: "",
-      });
-    });
+  // Scale pins up as you zoom in (altitude 1.5 → 1x, altitude 0.5 → 2x)
+  controls.addEventListener("change", () => {
+    const { altitude } = globe.pointOfView();
+    const s = Math.max(1.0, Math.min(2.0, 1.5 / Math.max(0.1, altitude)));
+    for (const pin of pins) {
+      if (pin.__obj) pin.__obj.scale.setScalar(s);
+    }
+  });
 
   // Layer toggle UI
   const toggleWrap = document.createElement("div");
@@ -820,7 +851,7 @@ fetch("./data/countries.geojson")
     font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
   `;
 
-  const makeToggle = (label, color, onToggle, defaultOn = true) => {
+  const makeToggle = (label, subtitle, color, onToggle, defaultOn = true) => {
     const btn = document.createElement("button");
     let on = defaultOn;
     const update = () => {
@@ -834,20 +865,22 @@ fetch("./data/countries.geojson")
         font-weight: 600;
         cursor: pointer;
         transition: all 0.15s;
+        text-align: center;
+        line-height: 1.3;
       `;
     };
-    btn.textContent = label;
+    btn.innerHTML = `<div>${label}</div><div style="font-size:10px; font-weight:400; opacity:0.85; margin-top:1px;">${subtitle}</div>`;
     update();
     btn.onclick = () => { on = !on; update(); onToggle(on); };
     return btn;
   };
 
-  toggleWrap.appendChild(makeToggle("● Patient Stories", SIGN_GREEN, (on) => {
+  toggleWrap.appendChild(makeToggle("● Patient Stories", "Click on a pin to learn more", SIGN_GREEN, (on) => {
     globe.objectsData(on ? pins : []);
   }));
 
-  toggleWrap.appendChild(makeToggle("● Program Sites", SIGN_BLUE, (on) => {
-    globe.ringsData(on ? programs : []);
+  toggleWrap.appendChild(makeToggle("● Program Countries", "Shaded countries represent SIGN program locations", SIGN_BLUE, (on) => {
+    globe.polygonCapColor(on ? programCapColor : () => "rgba(0,0,0,0)");
   }));
 
   container.appendChild(toggleWrap);
