@@ -869,7 +869,7 @@ const geojsonPromise = fetch("./data/countries.geojson")
         line-height: 1.3;
       `;
     };
-    btn.innerHTML = `<div>${label}</div><div style="font-size:10px; font-weight:400; opacity:0.85; margin-top:1px;">${subtitle}</div>`;
+    btn.innerHTML = `<div>${label}</div><div style="font-size:10px; font-weight:400; opacity:0.85; margin-top:1px;">${subtitle}</div><div style="font-size:9px; font-weight:400; opacity:0.65; margin-top:2px;">Click to toggle on/off</div>`;
     update();
     btn.onclick = () => { on = !on; update(); onToggle(on); };
     return btn;
