@@ -4,15 +4,15 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-  "dev": "vite",
-  "build:embed": "vite build",
-  "build:pages": "vite build -c vite.pages.js",
-  "preview": "vite preview",
-  "preview:pages": "vite preview -c vite.pages.js"
-}
-,
+    "dev": "vite",
+    "build:embed": "vite build",
+    "build:pages": "vite build -c vite.pages.js",
+    "preview": "vite preview",
+    "preview:pages": "vite preview -c vite.pages.js"
+  },
   "devDependencies": {
-    "vite": "^7.2.4"
+    "vite": "^7.2.4",
+    "vite-plugin-singlefile": "^2.3.0"
   },
   "dependencies": {
     "globe.gl": "^2.45.0"
