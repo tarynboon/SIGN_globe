@@ -377,72 +377,45 @@ function makeProgramMarker({ scale = 5.0 } = {}) {
 }
 
 const SIGN_GREEN = "#81BC41";
+const SIGN_DARK_GREEN = "#45842E";
 
-/** =========================
- *  Flat circle dot pin — lies on globe surface, green fill with dark outline
- *  ========================= */
-function makePinObject({ scale = 6.0 } = {}) {
-  const group = new THREE.Group();
+function makePinSprite() {
+  const size = 128;
+  const canvas = document.createElement("canvas");
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext("2d");
 
-  const rInner = scale * 0.20;
-  const rOuter = scale * 0.27;
+  const cx = size / 2, cy = size / 2;
+  const outerR = size / 2 - 4;
+  const innerR = outerR - 10;
 
-  const mkCircle = (r, color, renderOrder, offsetFactor) => {
-    const mesh = new THREE.Mesh(
-      new THREE.CircleGeometry(r, 32),
-      new THREE.MeshBasicMaterial({
-        color: new THREE.Color(color),
-        side: THREE.DoubleSide,
-        depthTest: true,
-        depthWrite: true,
-        polygonOffset: true,
-        polygonOffsetFactor: offsetFactor,
-        polygonOffsetUnits: offsetFactor,
-      })
-    );
-    // CircleGeometry faces +Z by default; rotate so it faces +Y (globe surface normal)
-    mesh.rotation.x = -Math.PI / 2;
-    mesh.renderOrder = renderOrder;
-    mesh.frustumCulled = false;
-    return mesh;
-  };
+  ctx.beginPath();
+  ctx.arc(cx, cy, outerR, 0, Math.PI * 2);
+  ctx.fillStyle = SIGN_DARK_GREEN;
+  ctx.fill();
 
-  const outline = mkCircle(rOuter, "#2d6a1f", 998, -9);
-  const dot = mkCircle(rInner, SIGN_GREEN, 999, -10);
-  group.add(outline);
-  group.add(dot);
+  ctx.beginPath();
+  ctx.arc(cx, cy, innerR, 0, Math.PI * 2);
+  ctx.fillStyle = SIGN_GREEN;
+  ctx.fill();
 
-  group.userData.plane = dot;
-  group.userData.baseScale = scale;
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  const mat = new THREE.SpriteMaterial({
+    map: texture,
+    transparent: true,
+    depthTest: true,
+    depthWrite: false,
+  });
 
-  return group;
+  const sprite = new THREE.Sprite(mat);
+  sprite.scale.set(3.2, 3.2, 1);
+  sprite.renderOrder = 999;
+
+  return sprite;
 }
 
-
-function setHover(group, on) {
-  const plane = group?.userData?.plane;
-  if (!plane) return;
-  const k = on ? 1.06 : 1.0;
-  plane.scale.set(k, k, 1);
-}
-
-function bounce(group) {
-  const plane = group?.userData?.plane;
-  if (!plane) return;
-
-  const start = performance.now();
-  const D = 420;
-
-  function frame(t) {
-    const p = Math.min(1, (t - start) / D);
-    const s = Math.sin(p * Math.PI) * (1 - p);
-    const k = 1 + s * 0.22;
-    plane.scale.set(k, k, 1);
-    if (p < 1) requestAnimationFrame(frame);
-    else plane.scale.set(1, 1, 1);
-  }
-  requestAnimationFrame(frame);
-}
 
 /** =========================
  *  Per-frame anchoring (vertical pin with fan-out)
@@ -451,31 +424,6 @@ function bounce(group) {
  *  - rotated around vertical axis for fan-out effect
  *  ========================= */
 
-function startPinAnchoring(globe, getPinsRef) {
-  let raf = 0;
-  const Y = new THREE.Vector3(0, 1, 0);
-
-  const tick = () => {
-    const pins = getPinsRef();
-    for (const d of pins) {
-      const obj = d.__obj;
-      if (!obj) continue;
-
-      const pos = obj.position;
-      const lenSq = pos.x * pos.x + pos.y * pos.y + pos.z * pos.z;
-      if (lenSq < 1e-10) continue;
-
-      // Point pin vertically (head away from globe center)
-      const n = pos.clone().normalize();
-      obj.quaternion.setFromUnitVectors(Y, n);
-    }
-
-    raf = requestAnimationFrame(tick);
-  };
-
-  raf = requestAnimationFrame(tick);
-  return () => cancelAnimationFrame(raf);
-}
 
 /** =========================
  *  Pin Clustering
@@ -723,40 +671,24 @@ const geojsonPromise = fetch(geojsonUrl)
     });
   }
 
-  // Cluster nearby stories into non-overlapping pins
-  // Tag each pin with an index so we can give them unique altitudes (prevents z-fighting)
-  const pins = clusterStories(storiesRaw).map((p, i) => ({ ...p, _idx: i }));
-  console.log(`Positioned ${storiesRaw.length} stories as ${pins.length} non-overlapping pins`);
-
-  // Pin size
-  const PIN_SCALE = 6.0;
-
-  // Hover tracking
-  let lastHovered = null;
+  const pins = clusterStories(storiesRaw);
+  console.log(`Positioned ${storiesRaw.length} stories as ${pins.length} pins`);
 
   globe
     .objectsData(pins)
     .objectLat((d) => d.lat)
     .objectLng((d) => d.lng)
-    .objectAltitude((d) => 0.015 + d._idx * 0.0005)
-    .objectThreeObject((d) => {
-      const obj = makePinObject({ scale: PIN_SCALE });
-      d.__obj = obj;
-      return obj;
-    })
+    .objectAltitude(0.009)
+    .objectThreeObject(() => makePinSprite())
     .onObjectHover((d) => {
-      if (lastHovered && lastHovered !== d) setHover(lastHovered.__obj, false);
-      if (d && d.__obj) {
-        setHover(d.__obj, true);
-        lastHovered = d;
-      } else {
-        lastHovered = null;
-      }
+      const c = container.querySelector("canvas");
+      const cur = d ? "default" : "grab";
+      if (c) c.style.cursor = cur;
+      container.style.cursor = cur;
     })
     .onObjectClick((d) => {
       if (!d) return;
       controls.autoRotate = false;
-      if (d.__obj) bounce(d.__obj);
       if (d.stories.length === 1) {
         panel.showStory(d.stories[0]);
       } else {
@@ -790,20 +722,20 @@ const geojsonPromise = fetch(geojsonUrl)
     let on = defaultOn;
     const update = () => {
       btn.style.cssText = `
-        padding: 10px 20px;
-        border-radius: 20px;
+        padding: 16px 32px;
+        border-radius: 24px;
         border: 2px solid ${color};
         background: ${on ? color : "rgba(255,255,255,0.85)"};
         color: ${on ? "#fff" : color};
-        font-size: 13px;
+        font-size: 16px;
         font-weight: 600;
-        cursor: pointer;
+        cursor: default;
         transition: all 0.15s;
         text-align: center;
         line-height: 1.3;
       `;
     };
-    btn.innerHTML = `<div>${label}</div><div style="font-size:10px; font-weight:400; opacity:0.85; margin-top:1px;">${subtitle}</div><div style="font-size:9px; font-weight:400; opacity:0.65; margin-top:2px;">Click to toggle on/off</div>`;
+    btn.innerHTML = `<div>${label}</div><div style="font-size:12px; font-weight:400; opacity:0.85; margin-top:2px;">${subtitle}</div><div style="font-size:11px; font-weight:400; opacity:0.65; margin-top:3px;">Click to toggle on/off</div>`;
     update();
     btn.onclick = () => { on = !on; update(); onToggle(on); };
     return btn;
@@ -819,15 +751,11 @@ const geojsonPromise = fetch(geojsonUrl)
 
   container.appendChild(toggleWrap);
 
-  // Start per-frame anchoring
-  const stopAnchoring = startPinAnchoring(globe, () => pins);
+  globe.pointOfView({ altitude: 2.0 });
 
   console.log("Globe mounted. Pins:", pins.length, "Programs:", programs.length);
 
   globe.__signCleanup = () => {
-    try {
-      stopAnchoring?.();
-    } catch {}
   };
 
   return globe;
