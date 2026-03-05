@@ -376,139 +376,43 @@ function makeProgramMarker({ scale = 5.0 } = {}) {
   return group;
 }
 
-/** =========================
- *  Pin texture (teardrop) — eliminates "unfilled crescent"
- *  Trick: after stroking, paint a slightly smaller GREEN head circle to cover the inner stroke,
- *  then paint the white dot.
- *  ========================= */
-
 const SIGN_GREEN = "#81BC41";
-const SIGN_OUTLINE = "#2d6a1f";
-
-function makePinTexture({ w = 256, h = 384 } = {}) {
-  const canvas = document.createElement("canvas");
-  canvas.width = w;
-  canvas.height = h;
-  const ctx = canvas.getContext("2d");
-
-  ctx.clearRect(0, 0, w, h);
-
-  const cx = w / 2;
-  const cy = h * 0.33;
-  const r = w * 0.22;
-  const tipY = h * 0.94;
-
-  // Teardrop path
-  const path = new Path2D();
-  path.arc(cx, cy, r, 0, Math.PI * 2);
-
-  path.moveTo(cx - r * 0.95, cy + r * 0.10);
-  path.bezierCurveTo(
-    cx - r * 1.35, cy + r * 1.05,
-    cx - r * 0.55, cy + r * 2.60,
-    cx, tipY
-  );
-  path.bezierCurveTo(
-    cx + r * 0.55, cy + r * 2.60,
-    cx + r * 1.35, cy + r * 1.05,
-    cx + r * 0.95, cy + r * 0.10
-  );
-  path.closePath();
-
-  // 1) Solid fill
-  ctx.fillStyle = SIGN_GREEN;
-  ctx.fill(path);
-
-  // 2) Outline
-  const lw = w * 0.05;
-  ctx.lineWidth = lw;
-  ctx.strokeStyle = SIGN_OUTLINE;
-  ctx.lineJoin = "round";
-  ctx.lineCap = "round";
-  ctx.stroke(path);
-
-  // 3) Cover the inner half of the outline on the head (removes "crescent" look)
-  ctx.fillStyle = SIGN_GREEN;
-  ctx.beginPath();
-  ctx.arc(cx, cy, Math.max(1, r - lw * 0.70), 0, Math.PI * 2);
-  ctx.fill();
-
-  // 4) White dot
-  ctx.fillStyle = "#fff";
-  ctx.beginPath();
-  ctx.arc(cx, cy, r * 0.45, 0, Math.PI * 2);
-  ctx.fill();
-
-  const tex = new THREE.CanvasTexture(canvas);
-  tex.needsUpdate = true;
-  tex.colorSpace = THREE.SRGBColorSpace;
-  tex.generateMipmaps = false;
-  tex.minFilter = THREE.LinearFilter;
-  tex.magFilter = THREE.LinearFilter;
-  return tex;
-}
-
-// DEV: no cache so you always see texture edits
-function getPinTexture() {
-  return makePinTexture();
-}
 
 /** =========================
- *  Teardrop plane pin (NOT sprite)
- *  - tip anchored at group origin
- *  - IMPORTANT: no plane local Z offsets (those can push into the globe after rotation)
+ *  Flat circle dot pin — lies on globe surface, green fill with dark outline
  *  ========================= */
 function makePinObject({ scale = 6.0 } = {}) {
   const group = new THREE.Group();
 
-  const w = scale;
-  const h = scale * 1.42;
+  const rInner = scale * 0.20;
+  const rOuter = scale * 0.27;
 
-  const mat = new THREE.MeshBasicMaterial({
-    map: getPinTexture(),
+  const mkCircle = (r, color, renderOrder, offsetFactor) => {
+    const mesh = new THREE.Mesh(
+      new THREE.CircleGeometry(r, 32),
+      new THREE.MeshBasicMaterial({
+        color: new THREE.Color(color),
+        side: THREE.DoubleSide,
+        depthTest: true,
+        depthWrite: true,
+        polygonOffset: true,
+        polygonOffsetFactor: offsetFactor,
+        polygonOffsetUnits: offsetFactor,
+      })
+    );
+    // CircleGeometry faces +Z by default; rotate so it faces +Y (globe surface normal)
+    mesh.rotation.x = -Math.PI / 2;
+    mesh.renderOrder = renderOrder;
+    mesh.frustumCulled = false;
+    return mesh;
+  };
 
-    // Keep edges crisp but not see-through
-    transparent: false,
-    alphaTest: 0.25,
+  const outline = mkCircle(rOuter, "#2d6a1f", 998, -9);
+  const dot = mkCircle(rInner, SIGN_GREEN, 999, -10);
+  group.add(outline);
+  group.add(dot);
 
-    // ✅ Pins win depth so borders can’t draw over them
-    depthTest: true,
-    depthWrite: true,
-
-    side: THREE.DoubleSide,
-
-    // ✅ Prevent z-fighting vs globe/borders
-    polygonOffset: true,
-    polygonOffsetFactor: -10,
-    polygonOffsetUnits: -10,
-  });
-
-  const plane = new THREE.Mesh(new THREE.PlaneGeometry(w, h), mat);
-
-  // tip anchored at group origin
-  plane.position.y = h * 0.5;
-  plane.position.z = 0;
-
-  // ✅ Draw after polygons (secondary safeguard)
-  plane.renderOrder = 999;
-  plane.frustumCulled = false;
-  // Disable raycasting on the plane — its full rectangle registers clicks
-  // in transparent areas, causing the hit zone to be offset from the visual pin.
-  plane.raycast = () => {};
-
-  group.add(plane);
-
-  // Invisible hit volume covering the full pin body (tip to head).
-  const pinH = h; // same as plane height
-  const hit = new THREE.Mesh(
-    new THREE.CylinderGeometry(scale * 0.32, scale * 0.18, pinH, 12),
-    new THREE.MeshBasicMaterial({ transparent: true, opacity: 0 })
-  );
-  hit.position.set(0, pinH * 0.5, 0); // centered along pin body
-  hit.renderOrder = 0;
-  group.add(hit);
-
-  group.userData.plane = plane;
+  group.userData.plane = dot;
   group.userData.baseScale = scale;
 
   return group;
@@ -675,7 +579,7 @@ export async function mountSignGlobe({
   height = 650,
   geojsonUrl = "https://tarynboon.github.io/SIGN_globe/data/countries.geojson",
 } = {}) {
-  console.log("MOUNT RUNNING ✅");
+  console.log("MOUNT RUNNING");
 
   const container = document.getElementById(containerId);
   if (!container) throw new Error(`Missing #${containerId}`);
@@ -743,7 +647,7 @@ const geojsonPromise = fetch(geojsonUrl)
     geojsonPromise,
     loadSheetData(),
   ]);
-  console.log("STORIES LOADED", storiesRaw.length, "PROGRAMS RAW ✅", programsRaw.length);
+  console.log("STORIES LOADED", storiesRaw.length, "PROGRAMS RAW", programsRaw.length);
 
   // Geocode programs that have a country name but no coordinates
   const centroids = geo ? buildCountryCentroids(geo) : {};
@@ -754,7 +658,7 @@ const geojsonPromise = fetch(geojsonUrl)
       return c ? { ...p, pin_lat: c.lat, pin_lon: c.lon } : p;
     })
     .filter((p) => Number.isFinite(p.pin_lat) && Number.isFinite(p.pin_lon));
-  console.log("PROGRAMS GEOCODED ✅", programs.length);
+  console.log("PROGRAMS GEOCODED", programs.length);
 
   // Set up country borders + program shading (needs both geo and program list)
   const programCountries = new Set(
@@ -866,14 +770,6 @@ const geojsonPromise = fetch(geojsonUrl)
       }
     });
 
-  // Scale pins up as you zoom in (altitude 1.5 → 1x, altitude 0.5 → 2x)
-  controls.addEventListener("change", () => {
-    const { altitude } = globe.pointOfView();
-    const s = Math.max(1.0, Math.min(2.0, 1.5 / Math.max(0.1, altitude)));
-    for (const pin of pins) {
-      if (pin.__obj) pin.__obj.scale.setScalar(s);
-    }
-  });
 
   // Layer toggle UI
   toggleWrap = document.createElement("div");
