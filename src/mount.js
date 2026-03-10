@@ -722,12 +722,12 @@ const geojsonPromise = fetch(geojsonUrl)
     let on = defaultOn;
     const update = () => {
       btn.style.cssText = `
-        padding: 16px 32px;
-        border-radius: 24px;
+        padding: 17px 34px;
+        border-radius: 20px;
         border: 2px solid ${color};
         background: ${on ? color : "rgba(255,255,255,0.85)"};
         color: ${on ? "#fff" : color};
-        font-size: 16px;
+        font-size: 17px;
         font-weight: 600;
         cursor: default;
         transition: all 0.15s;
@@ -735,7 +735,7 @@ const geojsonPromise = fetch(geojsonUrl)
         line-height: 1.3;
       `;
     };
-    btn.innerHTML = `<div>${label}</div><div style="font-size:12px; font-weight:400; opacity:0.85; margin-top:2px;">${subtitle}</div><div style="font-size:11px; font-weight:400; opacity:0.65; margin-top:3px;">Click to toggle on/off</div>`;
+    btn.innerHTML = `<div>${label}</div><div style="font-size:12px; font-weight:400; opacity:0.85; margin-top:1px;">${subtitle}</div><div style="font-size:10px; font-weight:400; opacity:0.65; margin-top:2px;">Click to toggle on/off</div>`;
     update();
     btn.onclick = () => { on = !on; update(); onToggle(on); };
     return btn;

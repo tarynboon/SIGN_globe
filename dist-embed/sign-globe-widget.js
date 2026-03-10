@@ -5221,15 +5221,15 @@ In order to be iterable, non-array objects must have a [Symbol.iterator]() metho
     z-index: 999999;
     font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
   `;const E=(N,I,P,B,F=!0)=>{const D=document.createElement("button");let k=F;const G=()=>{D.style.cssText=`
-        padding: 16px 32px;
-        border-radius: 24px;
+        padding: 17px 34px;
+        border-radius: 20px;
         border: 2px solid ${P};
         background: ${k?P:"rgba(255,255,255,0.85)"};
         color: ${k?"#fff":P};
-        font-size: 16px;
+        font-size: 17px;
         font-weight: 600;
         cursor: default;
         transition: all 0.15s;
         text-align: center;
         line-height: 1.3;
-      `};return D.innerHTML=`<div>${N}</div><div style="font-size:12px; font-weight:400; opacity:0.85; margin-top:2px;">${I}</div><div style="font-size:11px; font-weight:400; opacity:0.65; margin-top:3px;">Click to toggle on/off</div>`,G(),D.onclick=()=>{k=!k,G(),B(k)},D};return u.appendChild(E("● Patient Stories","Click on a pin to learn more",TP,N=>{r.objectsData(N?R:[])})),u.appendChild(E("● Program Countries","Shaded countries represent SIGN program locations",fae,N=>{r.polygonCapColor(N?S:()=>"rgba(0,0,0,0)")})),n.appendChild(u),r.pointOfView({altitude:2}),console.log("Globe mounted. Pins:",R.length,"Programs:",w.length),r.__signCleanup=()=>{},r}window.SignGlobe={mount:i=>gae(i)}})();
+      `};return D.innerHTML=`<div>${N}</div><div style="font-size:12px; font-weight:400; opacity:0.85; margin-top:1px;">${I}</div><div style="font-size:10px; font-weight:400; opacity:0.65; margin-top:2px;">Click to toggle on/off</div>`,G(),D.onclick=()=>{k=!k,G(),B(k)},D};return u.appendChild(E("● Patient Stories","Click on a pin to learn more",TP,N=>{r.objectsData(N?R:[])})),u.appendChild(E("● Program Countries","Shaded countries represent SIGN program locations",fae,N=>{r.polygonCapColor(N?S:()=>"rgba(0,0,0,0)")})),n.appendChild(u),r.pointOfView({altitude:2}),console.log("Globe mounted. Pins:",R.length,"Programs:",w.length),r.__signCleanup=()=>{},r}window.SignGlobe={mount:i=>gae(i)}})();
