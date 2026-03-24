@@ -378,6 +378,8 @@ function makeProgramMarker({ scale = 5.0 } = {}) {
 
 const SIGN_GREEN = "#81BC41";
 const SIGN_DARK_GREEN = "#45842E";
+const STORY_BLUE = "#2B7EC1";
+const STORY_DARK_BLUE = "#1A5B91";
 
 function makePinSprite() {
   const size = 128;
@@ -392,12 +394,12 @@ function makePinSprite() {
 
   ctx.beginPath();
   ctx.arc(cx, cy, outerR, 0, Math.PI * 2);
-  ctx.fillStyle = SIGN_DARK_GREEN;
+  ctx.fillStyle = STORY_DARK_BLUE;
   ctx.fill();
 
   ctx.beginPath();
   ctx.arc(cx, cy, innerR, 0, Math.PI * 2);
-  ctx.fillStyle = SIGN_GREEN;
+  ctx.fillStyle = STORY_BLUE;
   ctx.fill();
 
   const texture = new THREE.CanvasTexture(canvas);
@@ -543,8 +545,16 @@ export async function mountSignGlobe({
   }, { passive: false });
 
   const globe = Globe()(container)
-    .globeImageUrl("https://unpkg.com/three-globe/example/img/earth-blue-marble.jpg")
+    .globeImageUrl(null)
+    .atmosphereColor("rgba(180,215,245,0.5)")
     .backgroundColor("rgba(0,0,0,0)");
+
+  // White ocean — set globe sphere material to flat white
+  const globeMat = globe.globeMaterial();
+  globeMat.color.set(0xffffff);
+  globeMat.emissive.set(0xffffff);
+  globeMat.emissiveIntensity = 0.7;
+  globeMat.shininess = 0;
 
 // =========================
 // Country borders + geocoding (shared geojson fetch)
@@ -571,9 +581,9 @@ const geojsonPromise = fetch(geojsonUrl)
   controls.autoRotate = true;
   controls.autoRotateSpeed = 0.03;
 
-  // Lights
-  globe.scene().add(new THREE.AmbientLight(0xffffff, 0.95));
-  const dir = new THREE.DirectionalLight(0xffffff, 0.85);
+  // Lights — high ambient for flat/even look
+  globe.scene().add(new THREE.AmbientLight(0xffffff, 2.0));
+  const dir = new THREE.DirectionalLight(0xffffff, 0.2);
   dir.position.set(1, 1, 1);
   globe.scene().add(dir);
 
@@ -614,45 +624,49 @@ const geojsonPromise = fetch(geojsonUrl)
   );
   const programCapColor = (d) => {
     const name = (d.properties?.ADMIN || d.properties?.name || "").toLowerCase().trim();
-    return programCountries.has(name) ? "rgba(249,159,30,0.7)" : "rgba(0,0,0,0)";
+    return programCountries.has(name) ? "rgba(249,159,30,0.85)" : "rgba(200,203,208,0.9)";
   };
   if (geo) {
     globe
       .polygonsData(geo.features)
       .polygonAltitude((d) => d === hoveredCountry ? 0.0032 : 0.0026)
       .polygonCapColor(programCapColor)
-      .polygonSideColor(() => "rgba(0,0,0,0)")
+      .polygonSideColor(() => "rgba(160,163,168,0.4)")
       .polygonStrokeColor((d) =>
-        d === hoveredCountry ? "rgba(90,90,90,1.0)" : "rgba(120,120,120,0.95)"
+        d === hoveredCountry ? "rgba(80,80,80,1.0)" : "rgba(150,153,158,0.9)"
       )
       .polygonLabel((d) => d?.properties?.ADMIN || d?.properties?.name || "")
       .onPolygonHover((d) => { hoveredCountry = d; });
     console.log("Country borders + program shading loaded:", geo.features.length);
 
-    // Country name labels — visible when zoomed in (altitude < 1.5)
+    // Country name labels + program location labels — visible when zoomed in (altitude < 1.5)
     const countryLabels = geo.features
       .map((f) => {
         const name = f.properties?.ADMIN || f.properties?.name || "";
         if (!name) return null;
-        const c = centroids[name.toLowerCase().trim()];
+        const nameLower = name.toLowerCase().trim();
+        if (!programCountries.has(nameLower)) return null;
+        const c = centroids[nameLower];
         return c ? { name, lat: c.lat, lon: c.lon } : null;
       })
       .filter(Boolean);
+
+    const allLabels = [...countryLabels];
 
     globe
       .htmlElementsData([])
       .htmlLat((d) => d.lat)
       .htmlLng((d) => d.lon)
-      .htmlAltitude(0.004)
+      .htmlAltitude(0.006)
       .htmlElement((d) => {
         const el = document.createElement("div");
         el.textContent = d.name;
         el.style.cssText = `
           font-family: sans-serif;
           font-size: 11px;
-          font-weight: 300;
-          color: rgba(255,255,255,0.92);
-          text-shadow: 0 1px 2px rgba(0,0,0,0.6);
+          font-weight: 400;
+          color: rgba(70,70,70,0.9);
+          text-shadow: 0 1px 2px rgba(255,255,255,0.8);
           pointer-events: none;
           white-space: nowrap;
           user-select: none;
@@ -666,7 +680,7 @@ const geojsonPromise = fetch(geojsonUrl)
       const shouldShow = altitude < 1.5;
       if (shouldShow !== labelsVisible) {
         labelsVisible = shouldShow;
-        globe.htmlElementsData(shouldShow ? countryLabels : []);
+        globe.htmlElementsData(shouldShow ? allLabels : []);
       }
     });
   }
@@ -674,12 +688,25 @@ const geojsonPromise = fetch(geojsonUrl)
   const pins = clusterStories(storiesRaw);
   console.log(`Positioned ${storiesRaw.length} stories as ${pins.length} pins`);
 
+  // Keep track of all pin sprites so we can rescale them on zoom
+  const pinSprites = [];
+  const PIN_BASE_SCALE = 3.2;
+  const PIN_BASE_ALT = 2.0;
+
+  const updatePinScale = () => {
+    const { altitude } = globe.pointOfView();
+    // Scale proportional to camera distance → constant apparent screen size
+    const scale = PIN_BASE_SCALE * (1 + altitude) / (1 + PIN_BASE_ALT);
+    for (const s of pinSprites) s.scale.set(scale, scale, 1);
+  };
+  controls.addEventListener("change", updatePinScale);
+
   globe
     .objectsData(pins)
     .objectLat((d) => d.lat)
     .objectLng((d) => d.lng)
     .objectAltitude(0.009)
-    .objectThreeObject(() => makePinSprite())
+    .objectThreeObject(() => { const s = makePinSprite(); pinSprites.push(s); return s; })
     .onObjectHover((d) => {
       const c = container.querySelector("canvas");
       const cur = d ? "default" : "grab";
@@ -701,6 +728,16 @@ const geojsonPromise = fetch(geojsonUrl)
         });
       }
     });
+
+  // Program location dots — green, with name tooltip on hover
+  globe
+    .pointsData(programs)
+    .pointLat((d) => d.pin_lat)
+    .pointLng((d) => d.pin_lon)
+    .pointColor(() => SIGN_GREEN)
+    .pointAltitude(0.012)
+    .pointRadius(0.4)
+    .pointLabel((d) => `<div style="background:#fff;color:${SIGN_DARK_GREEN};padding:4px 8px;border-radius:4px;font-size:12px;font-weight:600;border:1px solid ${SIGN_DARK_GREEN};">${d.name || d.country}</div>`);
 
 
   // Layer toggle UI
@@ -741,12 +778,13 @@ const geojsonPromise = fetch(geojsonUrl)
     return btn;
   };
 
-  toggleWrap.appendChild(makeToggle("● Patient Stories", "Click on a pin to learn more", SIGN_GREEN, (on) => {
+  toggleWrap.appendChild(makeToggle("● Patient Stories", "Click on a pin to learn more", STORY_BLUE, (on) => {
     globe.objectsData(on ? pins : []);
   }));
 
   toggleWrap.appendChild(makeToggle("● Program Countries", "Shaded countries represent SIGN program locations", SIGN_BLUE, (on) => {
-    globe.polygonCapColor(on ? programCapColor : () => "rgba(0,0,0,0)");
+    globe.polygonCapColor(on ? programCapColor : () => "rgba(200,203,208,0.9)");
+    globe.pointsData(on ? programs : []);
   }));
 
   container.appendChild(toggleWrap);
