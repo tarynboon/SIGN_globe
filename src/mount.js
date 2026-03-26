@@ -141,14 +141,14 @@ function makePanel(container, { onClose, onOpen } = {}) {
     padding:18px;
     display:none;
     z-index:999999;
-    font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+    font-family: 'Nunito', system-ui, sans-serif;
 `;
 
 
   panel.innerHTML = `
     <div style="display:flex; justify-content:space-between; gap:12px; align-items:flex-start;">
       <div>
-        <div id="sg-title" style="font-weight:800;font-size:16px;"></div>
+        <div id="sg-title" style="font-weight:800;font-size:16px;font-family:'Montserrat',sans-serif;"></div>
         <div id="sg-meta" style="opacity:.7;font-size:13px; margin-top:2px;"></div>
       </div>
       <button id="sg-close" style="cursor:pointer; font-size:18px; line-height:1; border:0; background:transparent;">×</button>
@@ -172,27 +172,63 @@ function makePanel(container, { onClose, onOpen } = {}) {
 
     <!-- Story -->
     <div id="sg-story" style="display:none;">
-      <div id="sg-image" style="margin-top:10px;display:none;">
-        <img
-          id="sg-img"
-          style="width:100%;height:auto;max-height:28vh;object-fit:contain;border-radius:10px;display:block;background:#f3f3f3;"
-        />
+
+      <!-- Flip card (stories with a photo) -->
+      <div id="sg-flip-wrap" style="display:none; margin-top:10px;">
+        <div id="sg-flip-inner" style="width:100%; border-radius:10px; overflow:hidden;">
+          <!-- Front: photo -->
+          <div id="sg-flip-front" style="
+            cursor:pointer; background:#f3f3f3; border-radius:10px; overflow:hidden;
+            position:relative;
+          ">
+            <img id="sg-img" style="width:100%;max-height:min(360px,52vh);object-fit:contain;display:block;" />
+            <div style="
+              position:absolute; bottom:0; left:0; right:0;
+              background:linear-gradient(transparent, rgba(0,0,0,0.55));
+              color:#fff; font-size:14px; font-weight:700;
+              font-family:'Montserrat',sans-serif;
+              padding:28px 16px 12px;
+              text-align:center; pointer-events:none;
+              letter-spacing:0.02em;
+            ">
+              Click anywhere on photo to read the story →
+            </div>
+          </div>
+          <!-- Back: story text -->
+          <div id="sg-flip-back" style="display:none; padding:14px; background:#fafafa;
+            border:1px solid rgba(0,0,0,0.08); border-radius:10px; box-sizing:border-box;">
+            <div id="sg-body" style="line-height:1.45; font-size:14px;"></div>
+            <div style="margin-top:12px;">
+              <a id="sg-src" href="#" target="_blank" rel="noopener"
+                style="display:none; padding:9px 18px; background:#81BC41; color:#fff;
+                  border-radius:8px; font-weight:700; font-size:14px; text-decoration:none;
+                  letter-spacing:0.01em;">Read on SIGN</a>
+            </div>
+            <div style="
+              margin-top:16px; padding:10px 0 4px;
+              border-top:1px solid rgba(0,0,0,0.08);
+              text-align:center; color:#888; font-size:13px; font-weight:700;
+              font-family:'Montserrat',sans-serif; letter-spacing:0.02em;
+            ">
+              <button id="sg-flip-back-btn" style="
+                background:none; border:none; font-size:13px; font-weight:700;
+                font-family:'Montserrat',sans-serif; color:#888; cursor:pointer;
+                letter-spacing:0.02em;
+              ">← Click anywhere to see photo</button>
+            </div>
+          </div>
+        </div>
       </div>
 
-      <div
-        id="sg-body"
-        style="
-          margin-top:10px;
-          line-height:1.45;
-        "
-      ></div>
-
-      <div style="margin-top:14px;">
-        <a id="sg-src" href="#" target="_blank" rel="noopener"
-          style="display:none; padding:9px 18px; background:#81BC41; color:#fff;
+      <!-- Text-only view (stories without a photo) -->
+      <div id="sg-body-solo" style="display:none; margin-top:10px; line-height:1.45; font-size:14px;"></div>
+      <div id="sg-src-solo-wrap" style="display:none; margin-top:14px;">
+        <a id="sg-src-solo" href="#" target="_blank" rel="noopener"
+          style="padding:9px 18px; background:#81BC41; color:#fff;
             border-radius:8px; font-weight:700; font-size:14px; text-decoration:none;
             letter-spacing:0.01em;">Read on SIGN</a>
       </div>
+
     </div>
   `;
 
@@ -205,10 +241,36 @@ function makePanel(container, { onClose, onOpen } = {}) {
   const listEl = panel.querySelector("#sg-list");
 
   const storyWrap = panel.querySelector("#sg-story");
-  const bodyEl = panel.querySelector("#sg-body");
-  const imgWrap = panel.querySelector("#sg-image");
+
+  // Flip card elements (stories with photo)
+  const flipWrap = panel.querySelector("#sg-flip-wrap");
+  const flipInner = panel.querySelector("#sg-flip-inner");
   const imgEl = panel.querySelector("#sg-img");
+  const bodyEl = panel.querySelector("#sg-body");
   const srcEl = panel.querySelector("#sg-src");
+
+  // Text-only elements (stories without photo)
+  const bodySolo = panel.querySelector("#sg-body-solo");
+  const srcSoloWrap = panel.querySelector("#sg-src-solo-wrap");
+  const srcSolo = panel.querySelector("#sg-src-solo");
+
+  const flipFront = panel.querySelector("#sg-flip-front");
+  const flipBack = panel.querySelector("#sg-flip-back");
+
+  const doFlip = (showBack) => {
+    flipInner.style.transition = "transform 0.15s ease-in";
+    flipInner.style.transform = "scaleX(0)";
+    setTimeout(() => {
+      flipFront.style.display = showBack ? "none" : "block";
+      flipBack.style.display = showBack ? "block" : "none";
+      flipInner.style.transition = "transform 0.15s ease-out";
+      flipInner.style.transform = "scaleX(1)";
+    }, 150);
+  };
+
+  flipFront.addEventListener("click", () => doFlip(true));
+  flipBack.addEventListener("click", () => doFlip(false));
+  srcEl.addEventListener("click", (e) => e.stopPropagation());
 
   panel.querySelector("#sg-close").onclick = () => { panel.style.display = "none"; onClose?.(); };
 
@@ -236,20 +298,29 @@ function makePanel(container, { onClose, onOpen } = {}) {
     storyWrap.style.display = "block";
 
     if (story.image_url) {
+      // Flip card: start on photo side
+      flipInner.style.transform = "scaleX(1)";
+      flipFront.style.display = "block";
+      flipBack.style.display = "none";
       imgEl.src = story.image_url;
-      imgWrap.style.display = "block";
+      bodyEl.innerHTML = story.story_html || "";
+      srcEl.href = story.source_url || "#";
+      srcEl.style.display = story.source_url ? "inline" : "none";
+      flipWrap.style.display = "block";
+      bodySolo.style.display = "none";
+      srcSoloWrap.style.display = "none";
     } else {
+      // No photo — show text directly
+      flipWrap.style.display = "none";
       imgEl.src = "";
-      imgWrap.style.display = "none";
-    }
-
-    bodyEl.innerHTML = story.story_html || "";
-
-    if (story.source_url) {
-      srcEl.href = story.source_url;
-      srcEl.style.display = "inline";
-    } else {
-      srcEl.style.display = "none";
+      bodySolo.innerHTML = story.story_html || "";
+      bodySolo.style.display = "block";
+      if (story.source_url) {
+        srcSolo.href = story.source_url;
+        srcSoloWrap.style.display = "block";
+      } else {
+        srcSoloWrap.style.display = "none";
+      }
     }
 
     show();
@@ -379,42 +450,34 @@ function makeProgramMarker({ scale = 5.0 } = {}) {
 const SIGN_GREEN = "#81BC41";
 const SIGN_DARK_GREEN = "#45842E";
 const STORY_BLUE = "#2B7EC1";
-const STORY_DARK_BLUE = "#1A5B91";
 
-function makePinSprite() {
-  const size = 128;
-  const canvas = document.createElement("canvas");
-  canvas.width = size;
-  canvas.height = size;
-  const ctx = canvas.getContext("2d");
+// Cache one texture per color so we don't recreate canvases for every dot
+const _dotTextureCache = {};
 
-  const cx = size / 2, cy = size / 2;
-  const outerR = size / 2 - 4;
-  const innerR = outerR - 10;
-
-  ctx.beginPath();
-  ctx.arc(cx, cy, outerR, 0, Math.PI * 2);
-  ctx.fillStyle = STORY_DARK_BLUE;
-  ctx.fill();
-
-  ctx.beginPath();
-  ctx.arc(cx, cy, innerR, 0, Math.PI * 2);
-  ctx.fillStyle = STORY_BLUE;
-  ctx.fill();
-
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.colorSpace = THREE.SRGBColorSpace;
+function makeDotSprite(color) {
+  if (!_dotTextureCache[color]) {
+    const size = 128;
+    const canvas = document.createElement("canvas");
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext("2d");
+    ctx.beginPath();
+    ctx.arc(size / 2, size / 2, size / 2 - 4, 0, Math.PI * 2);
+    ctx.fillStyle = color;
+    ctx.fill();
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.colorSpace = THREE.SRGBColorSpace;
+    _dotTextureCache[color] = texture;
+  }
   const mat = new THREE.SpriteMaterial({
-    map: texture,
+    map: _dotTextureCache[color],
     transparent: true,
     depthTest: true,
     depthWrite: false,
   });
-
   const sprite = new THREE.Sprite(mat);
   sprite.scale.set(3.2, 3.2, 1);
   sprite.renderOrder = 999;
-
   return sprite;
 }
 
@@ -531,6 +594,15 @@ export async function mountSignGlobe({
 } = {}) {
   console.log("MOUNT RUNNING");
 
+  // Inject Google Fonts if not already present
+  if (!document.querySelector('link[data-sg-fonts]')) {
+    const link = document.createElement("link");
+    link.rel = "stylesheet";
+    link.dataset.sgFonts = "1";
+    link.href = "https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700;800&family=Nunito:wght@400;600;700&display=swap";
+    document.head.appendChild(link);
+  }
+
   const container = document.getElementById(containerId);
   if (!container) throw new Error(`Missing #${containerId}`);
 
@@ -549,11 +621,12 @@ export async function mountSignGlobe({
     .atmosphereColor("rgba(180,215,245,0.5)")
     .backgroundColor("rgba(0,0,0,0)");
 
-  // White ocean — set globe sphere material to flat white
+  // Set globe sphere to pure flat gray — driven entirely by emissive so lighting doesn't
+  // brighten it and create visible white gaps where polygon data has holes.
   const globeMat = globe.globeMaterial();
-  globeMat.color.set(0xffffff);
-  globeMat.emissive.set(0xffffff);
-  globeMat.emissiveIntensity = 0.7;
+  globeMat.color.set(0x000000);
+  globeMat.emissive.set(0xc8cbd0);
+  globeMat.emissiveIntensity = 1.0;
   globeMat.shininess = 0;
 
 // =========================
@@ -619,19 +692,40 @@ const geojsonPromise = fetch(geojsonUrl)
   console.log("PROGRAMS GEOCODED", programs.length);
 
   // Set up country borders + program shading (needs both geo and program list)
+  // Many GeoJSON files use long official country names (e.g. "United Republic of Tanzania")
+  // while the spreadsheet uses short common names ("Tanzania"). This map normalizes both sides.
+  const COUNTRY_NAME_ALIASES = {
+    "tanzania": "united republic of tanzania",
+    "dr congo": "democratic republic of the congo",
+    "democratic republic of congo": "democratic republic of the congo",
+    "congo - kinshasa": "democratic republic of the congo",
+    "congo, dem. rep.": "democratic republic of the congo",
+    "congo - brazzaville": "republic of congo",
+    "republic of the congo": "republic of congo",
+    "syria": "syrian arab republic",
+    "laos": "lao pdr",
+    "vietnam": "viet nam",
+    "czechia": "czech republic",
+    "czech republic": "czechia",
+  };
+  const normalizeCountry = (s) => {
+    const n = (s || "").toLowerCase().trim();
+    return COUNTRY_NAME_ALIASES[n] || n;
+  };
+
   const programCountries = new Set(
-    programs.map((p) => p.country.toLowerCase().trim()).filter(Boolean)
+    programs.map((p) => normalizeCountry(p.country)).filter(Boolean)
   );
   const programCapColor = (d) => {
-    const name = (d.properties?.ADMIN || d.properties?.name || "").toLowerCase().trim();
-    return programCountries.has(name) ? "rgba(249,159,30,0.85)" : "rgba(200,203,208,0.9)";
+    const name = normalizeCountry(d.properties?.ADMIN || d.properties?.name || "");
+    return programCountries.has(name) ? "rgba(249,159,30,0.85)" : "rgba(200,203,208,1.0)";
   };
   if (geo) {
     globe
       .polygonsData(geo.features)
-      .polygonAltitude((d) => d === hoveredCountry ? 0.0032 : 0.0026)
+      .polygonAltitude((d) => d === hoveredCountry ? 0.007 : 0.005)
       .polygonCapColor(programCapColor)
-      .polygonSideColor(() => "rgba(160,163,168,0.4)")
+      .polygonSideColor(() => "rgba(0,0,0,0)")
       .polygonStrokeColor((d) =>
         d === hoveredCountry ? "rgba(80,80,80,1.0)" : "rgba(150,153,158,0.9)"
       )
@@ -662,9 +756,9 @@ const geojsonPromise = fetch(geojsonUrl)
         const el = document.createElement("div");
         el.textContent = d.name;
         el.style.cssText = `
-          font-family: sans-serif;
-          font-size: 11px;
-          font-weight: 400;
+          font-family: 'Nunito', sans-serif;
+          font-size: 13px;
+          font-weight: 600;
           color: rgba(70,70,70,0.9);
           text-shadow: 0 1px 2px rgba(255,255,255,0.8);
           pointer-events: none;
@@ -690,23 +784,38 @@ const geojsonPromise = fetch(geojsonUrl)
 
   // Keep track of all pin sprites so we can rescale them on zoom
   const pinSprites = [];
-  const PIN_BASE_SCALE = 3.2;
+  const PIN_BASE_SCALE = 2.2;
   const PIN_BASE_ALT = 2.0;
 
   const updatePinScale = () => {
     const { altitude } = globe.pointOfView();
-    // Scale proportional to camera distance → constant apparent screen size
     const scale = PIN_BASE_SCALE * (1 + altitude) / (1 + PIN_BASE_ALT);
     for (const s of pinSprites) s.scale.set(scale, scale, 1);
   };
   controls.addEventListener("change", updatePinScale);
+  setTimeout(updatePinScale, 100);
+
+  // Normalise programs to same lat/lng shape as story pins
+  const storyDots = pins.map((p) => ({ ...p, _type: "story" }));
+  const programDots = programs.map((p) => ({ ...p, lat: p.pin_lat, lng: p.pin_lon, _type: "program" }));
+
+  let showStories = true;
+  let showPrograms = true;
+  const updateDots = () => globe.objectsData([
+    ...(showStories ? storyDots : []),
+    ...(showPrograms ? programDots : []),
+  ]);
 
   globe
-    .objectsData(pins)
+    .objectsData([...storyDots, ...programDots])
     .objectLat((d) => d.lat)
     .objectLng((d) => d.lng)
-    .objectAltitude(0.009)
-    .objectThreeObject(() => { const s = makePinSprite(); pinSprites.push(s); return s; })
+    .objectAltitude(0.018)
+    .objectThreeObject((d) => {
+      const s = makeDotSprite(d._type === "story" ? STORY_BLUE : SIGN_GREEN);
+      pinSprites.push(s);
+      return s;
+    })
     .onObjectHover((d) => {
       const c = container.querySelector("canvas");
       const cur = d ? "default" : "grab";
@@ -714,7 +823,7 @@ const geojsonPromise = fetch(geojsonUrl)
       container.style.cursor = cur;
     })
     .onObjectClick((d) => {
-      if (!d) return;
+      if (!d || d._type !== "story") return;
       controls.autoRotate = false;
       if (d.stories.length === 1) {
         panel.showStory(d.stories[0]);
@@ -729,16 +838,6 @@ const geojsonPromise = fetch(geojsonUrl)
       }
     });
 
-  // Program location dots — green, with name tooltip on hover
-  globe
-    .pointsData(programs)
-    .pointLat((d) => d.pin_lat)
-    .pointLng((d) => d.pin_lon)
-    .pointColor(() => SIGN_GREEN)
-    .pointAltitude(0.012)
-    .pointRadius(0.4)
-    .pointLabel((d) => `<div style="background:#fff;color:${SIGN_DARK_GREEN};padding:4px 8px;border-radius:4px;font-size:12px;font-weight:600;border:1px solid ${SIGN_DARK_GREEN};">${d.name || d.country}</div>`);
-
 
   // Layer toggle UI
   toggleWrap = document.createElement("div");
@@ -751,7 +850,7 @@ const geojsonPromise = fetch(geojsonUrl)
     display: flex;
     gap: 8px;
     z-index: 999999;
-    font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+    font-family: 'Nunito', system-ui, sans-serif;
   `;
 
   const makeToggle = (label, subtitle, color, onToggle, defaultOn = true) => {
@@ -772,19 +871,22 @@ const geojsonPromise = fetch(geojsonUrl)
         line-height: 1.3;
       `;
     };
-    btn.innerHTML = `<div>${label}</div><div style="font-size:12px; font-weight:400; opacity:0.85; margin-top:1px;">${subtitle}</div><div style="font-size:10px; font-weight:400; opacity:0.65; margin-top:2px;">Click to toggle on/off</div>`;
+    btn.innerHTML = `<div style="font-family:'Montserrat',sans-serif;">${label}</div><div style="font-size:12px; font-weight:400; opacity:0.85; margin-top:1px; font-family:'Nunito',sans-serif;">${subtitle}</div><div style="font-size:10px; font-weight:400; opacity:0.65; margin-top:2px; font-family:'Nunito',sans-serif;">Click to toggle on/off</div>`;
     update();
     btn.onclick = () => { on = !on; update(); onToggle(on); };
     return btn;
   };
 
   toggleWrap.appendChild(makeToggle("● Patient Stories", "Click on a pin to learn more", STORY_BLUE, (on) => {
-    globe.objectsData(on ? pins : []);
+    showStories = on; updateDots();
   }));
 
   toggleWrap.appendChild(makeToggle("● Program Countries", "Shaded countries represent SIGN program locations", SIGN_BLUE, (on) => {
     globe.polygonCapColor(on ? programCapColor : () => "rgba(200,203,208,0.9)");
-    globe.pointsData(on ? programs : []);
+  }));
+
+  toggleWrap.appendChild(makeToggle("● Program Locations", "Dots show specific SIGN program sites", SIGN_GREEN, (on) => {
+    showPrograms = on; updateDots();
   }));
 
   container.appendChild(toggleWrap);
