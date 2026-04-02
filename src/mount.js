@@ -903,7 +903,7 @@ const geojsonPromise = fetch(geojsonUrl)
     return btn;
   };
 
-  toggleWrap.appendChild(makeToggle("● Patient Stories", "Click on a pin to learn more", STORY_BLUE, (on) => {
+  toggleWrap.appendChild(makeToggle("● Patient Stories", "Click on a blue pin to learn more", STORY_BLUE, (on) => {
     showStories = on; updateDots();
   }));
 
