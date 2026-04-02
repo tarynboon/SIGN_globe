@@ -839,6 +839,7 @@ const geojsonPromise = fetch(geojsonUrl)
     .objectAltitude(0.018)
     .objectThreeObject((d) => {
       const s = makeDotSprite(d._type === "story" ? STORY_BLUE : SIGN_GREEN);
+      s.renderOrder = d._type === "story" ? 1000 : 999;
       pinSprites.push(s);
       return s;
     })
