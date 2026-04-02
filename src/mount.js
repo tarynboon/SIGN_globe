@@ -685,9 +685,8 @@ const geojsonPromise = fetch(geojsonUrl)
     "republic of the congo": "republic of congo",
     "syria": "syrian arab republic",
     "laos": "lao pdr",
-    "vietnam": "viet nam",
-    "viet nam": "viet nam",
-    "việt nam": "viet nam",
+    "viet nam": "vietnam",
+    "việt nam": "vietnam",
     "czechia": "czech republic",
     "czech republic": "czechia",
   };
