@@ -664,7 +664,9 @@ const geojsonPromise = fetch(geojsonUrl)
   const programs = programsRaw
     .map((p) => {
       if (p.pin_lat !== null && p.pin_lon !== null) return p;
-      const c = centroids[p.country.toLowerCase().trim()];
+      // Fall back to progLoc (program_countries column) if country_name is blank
+      const countryKey = (p.country || p.progLoc || "").toLowerCase().trim();
+      const c = centroids[countryKey];
       return c ? { ...p, pin_lat: c.lat, pin_lon: c.lon } : p;
     })
     .filter((p) => Number.isFinite(p.pin_lat) && Number.isFinite(p.pin_lon));
