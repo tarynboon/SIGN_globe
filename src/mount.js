@@ -487,9 +487,12 @@ function buildCountryCentroids(geo) {
     } else {
       ring = geom.coordinates[0];
     }
-    let sumLat = 0, sumLon = 0;
-    for (const [lon, lat] of ring) { sumLon += lon; sumLat += lat; }
-    map[name] = { lat: sumLat / ring.length, lon: sumLon / ring.length };
+    let minLat = Infinity, maxLat = -Infinity, minLon = Infinity, maxLon = -Infinity;
+    for (const [lon, lat] of ring) {
+      if (lat < minLat) minLat = lat; if (lat > maxLat) maxLat = lat;
+      if (lon < minLon) minLon = lon; if (lon > maxLon) maxLon = lon;
+    }
+    map[name] = { lat: (minLat + maxLat) / 2, lon: (minLon + maxLon) / 2 };
   });
   return map;
 }
@@ -694,6 +697,7 @@ const geojsonPromise = fetch(geojsonUrl)
   const programCountries = new Set(
     programs.flatMap((p) => [p.country, p.progLoc].map(normalizeCountry)).filter(Boolean)
   );
+  console.log("Program countries (normalized):", [...programCountries].sort());
   const programCapColor = (d) => {
     const name = normalizeCountry(d.properties?.ADMIN || d.properties?.name || "");
     return programCountries.has(name) ? "rgba(249,159,30,0.85)" : "rgba(200,203,208,1.0)";
@@ -701,7 +705,11 @@ const geojsonPromise = fetch(geojsonUrl)
   if (geo) {
     globe
       .polygonsData(geo.features)
-      .polygonAltitude((d) => d === hoveredCountry ? 0.007 : 0.005)
+      .polygonAltitude((d) => {
+        if (d === hoveredCountry) return 0.008;
+        const name = normalizeCountry(d.properties?.ADMIN || d.properties?.name || "");
+        return programCountries.has(name) ? 0.006 : 0.005;
+      })
       .polygonCapColor(programCapColor)
       .polygonSideColor(() => "rgba(0,0,0,0)")
       .polygonStrokeColor((d) =>
