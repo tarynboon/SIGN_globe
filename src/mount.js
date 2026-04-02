@@ -696,10 +696,9 @@ const geojsonPromise = fetch(geojsonUrl)
     return COUNTRY_NAME_ALIASES[n] || n;
   };
 
-  // Build from both country field and the raw program_countries column value (stored as p.country
-  // with progLoc fallback) so nothing is missed even if country_name is blank in some rows.
+  // Orange shading is driven exclusively by the program_countries column (stored as p.progLoc).
   const programCountries = new Set(
-    programs.flatMap((p) => [p.country, p.progLoc].map(normalizeCountry)).filter(Boolean)
+    programs.map((p) => normalizeCountry(p.progLoc)).filter(Boolean)
   );
   console.log("Program countries (normalized):", [...programCountries].sort());
   if (geo) {
