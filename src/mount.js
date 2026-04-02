@@ -729,8 +729,11 @@ const geojsonPromise = fetch(geojsonUrl)
     const laosFeature = geo.features.find(f => /lao/i.test(f.properties?.ADMIN || f.properties?.name || ""));
     console.log("Laos GeoJSON name:", laosFeature?.properties?.ADMIN || laosFeature?.properties?.name || "NOT FOUND");
   }
+  // Disputed/overlapping territories that should always match their parent country's color
+  const MATCH_PARENT = { "somaliland": "somalia" };
   const programCapColor = (d) => {
-    const name = normalizeCountry(d.properties?.ADMIN || d.properties?.name || "");
+    let name = normalizeCountry(d.properties?.ADMIN || d.properties?.name || "");
+    if (MATCH_PARENT[name]) name = MATCH_PARENT[name];
     return programCountries.has(name) ? "rgba(249,159,30,0.85)" : "rgba(200,203,208,1.0)";
   };
   if (geo) {
@@ -738,14 +741,16 @@ const geojsonPromise = fetch(geojsonUrl)
       .polygonsData(geo.features)
       .polygonAltitude((d) => {
         if (d === hoveredCountry) return 0.012;
-        const name = normalizeCountry(d.properties?.ADMIN || d.properties?.name || "");
+        let name = normalizeCountry(d.properties?.ADMIN || d.properties?.name || "");
+        if (MATCH_PARENT[name]) name = MATCH_PARENT[name];
         return programCountries.has(name) ? 0.008 : 0.002;
       })
       .polygonCapColor(programCapColor)
       .polygonSideColor(() => "rgba(0,0,0,0)")
       .polygonStrokeColor((d) => {
         if (d === hoveredCountry) return "rgba(60,60,60,1.0)";
-        const name = normalizeCountry(d.properties?.ADMIN || d.properties?.name || "");
+        let name = normalizeCountry(d.properties?.ADMIN || d.properties?.name || "");
+        if (MATCH_PARENT[name]) name = MATCH_PARENT[name];
         return programCountries.has(name) ? "rgba(200,120,0,0.9)" : "rgba(120,123,128,0.8)";
       })
       .polygonLabel((d) => d?.properties?.ADMIN || d?.properties?.name || "")
