@@ -684,6 +684,8 @@ const geojsonPromise = fetch(geojsonUrl)
     "syria": "syrian arab republic",
     "laos": "lao pdr",
     "vietnam": "viet nam",
+    "viet nam": "viet nam",
+    "việt nam": "viet nam",
     "czechia": "czech republic",
     "czech republic": "czechia",
   };
@@ -698,6 +700,10 @@ const geojsonPromise = fetch(geojsonUrl)
     programs.flatMap((p) => [p.country, p.progLoc].map(normalizeCountry)).filter(Boolean)
   );
   console.log("Program countries (normalized):", [...programCountries].sort());
+  if (geo) {
+    const vnFeature = geo.features.find(f => /viet|vietnam/i.test(f.properties?.ADMIN || f.properties?.name || ""));
+    console.log("Vietnam GeoJSON name:", vnFeature?.properties?.ADMIN || vnFeature?.properties?.name || "NOT FOUND");
+  }
   const programCapColor = (d) => {
     const name = normalizeCountry(d.properties?.ADMIN || d.properties?.name || "");
     return programCountries.has(name) ? "rgba(249,159,30,0.85)" : "rgba(200,203,208,1.0)";
@@ -706,9 +712,9 @@ const geojsonPromise = fetch(geojsonUrl)
     globe
       .polygonsData(geo.features)
       .polygonAltitude((d) => {
-        if (d === hoveredCountry) return 0.008;
+        if (d === hoveredCountry) return 0.012;
         const name = normalizeCountry(d.properties?.ADMIN || d.properties?.name || "");
-        return programCountries.has(name) ? 0.006 : 0.005;
+        return programCountries.has(name) ? 0.008 : 0.002;
       })
       .polygonCapColor(programCapColor)
       .polygonSideColor(() => "rgba(0,0,0,0)")
