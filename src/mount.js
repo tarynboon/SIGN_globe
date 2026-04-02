@@ -661,15 +661,31 @@ const geojsonPromise = fetch(geojsonUrl)
 
   // Geocode programs that have a country name but no coordinates
   const centroids = geo ? buildCountryCentroids(geo) : {};
+  // Add short-name aliases so "Tanzania" finds "United Republic of Tanzania" etc.
+  const CENTROID_ALIASES = [
+    ["tanzania", "united republic of tanzania"],
+    ["vietnam", "vietnam"],
+    ["laos", "laos"],
+    ["lao pdr", "laos"],
+    ["lao people's democratic republic", "laos"],
+    ["dr congo", "democratic republic of the congo"],
+    ["syria", "syrian arab republic"],
+  ];
+  for (const [alias, canonical] of CENTROID_ALIASES) {
+    if (!centroids[alias] && centroids[canonical]) centroids[alias] = centroids[canonical];
+  }
   const programs = programsRaw
     .map((p) => {
       if (p.pin_lat !== null && p.pin_lon !== null) return p;
-      // Fall back to progLoc (program_countries column) if country_name is blank
-      const countryKey = (p.country || p.progLoc || "").toLowerCase().trim();
-      const c = centroids[countryKey];
+      const raw = (p.country || p.progLoc || "").toLowerCase().trim();
+      const c = centroids[raw];
       return c ? { ...p, pin_lat: c.lat, pin_lon: c.lon } : p;
     })
-    .filter((p) => Number.isFinite(p.pin_lat) && Number.isFinite(p.pin_lon));
+    .filter((p) => {
+      const ok = Number.isFinite(p.pin_lat) && Number.isFinite(p.pin_lon);
+      if (!ok) console.warn("Program dropped (no coords):", p.name, "|", p.country, "|", p.progLoc);
+      return ok;
+    });
   console.log("PROGRAMS GEOCODED", programs.length);
 
   // Set up country borders + program shading (needs both geo and program list)
@@ -684,7 +700,10 @@ const geojsonPromise = fetch(geojsonUrl)
     "congo - brazzaville": "republic of congo",
     "republic of the congo": "republic of congo",
     "syria": "syrian arab republic",
-    "laos": "lao pdr",
+    "laos": "laos",
+    "lao pdr": "laos",
+    "lao people's democratic republic": "laos",
+    "lao people\u2019s democratic republic": "laos",
     "viet nam": "vietnam",
     "việt nam": "vietnam",
     "czechia": "czech republic",
@@ -695,14 +714,20 @@ const geojsonPromise = fetch(geojsonUrl)
     return COUNTRY_NAME_ALIASES[n] || n;
   };
 
-  // Orange shading is driven exclusively by the program_countries column (stored as p.progLoc).
+  // Orange shading is driven exclusively by the program_countries column.
+  // Use programsRaw (before geocoding filter) so countries with missing coords still shade.
   const programCountries = new Set(
-    programs.map((p) => normalizeCountry(p.progLoc)).filter(Boolean)
+    programsRaw.map((p) => normalizeCountry(p.progLoc)).filter(Boolean)
   );
   console.log("Program countries (normalized):", [...programCountries].sort());
+  console.log("Raw progLoc values:", programs.map(p => p.progLoc));
   if (geo) {
     const vnFeature = geo.features.find(f => /viet|vietnam/i.test(f.properties?.ADMIN || f.properties?.name || ""));
     console.log("Vietnam GeoJSON name:", vnFeature?.properties?.ADMIN || vnFeature?.properties?.name || "NOT FOUND");
+    const tzFeature = geo.features.find(f => /tanzania/i.test(f.properties?.ADMIN || f.properties?.name || ""));
+    console.log("Tanzania GeoJSON name:", tzFeature?.properties?.ADMIN || tzFeature?.properties?.name || "NOT FOUND");
+    const laosFeature = geo.features.find(f => /lao/i.test(f.properties?.ADMIN || f.properties?.name || ""));
+    console.log("Laos GeoJSON name:", laosFeature?.properties?.ADMIN || laosFeature?.properties?.name || "NOT FOUND");
   }
   const programCapColor = (d) => {
     const name = normalizeCountry(d.properties?.ADMIN || d.properties?.name || "");
@@ -718,21 +743,30 @@ const geojsonPromise = fetch(geojsonUrl)
       })
       .polygonCapColor(programCapColor)
       .polygonSideColor(() => "rgba(0,0,0,0)")
-      .polygonStrokeColor((d) =>
-        d === hoveredCountry ? "rgba(80,80,80,1.0)" : "rgba(150,153,158,0.9)"
-      )
+      .polygonStrokeColor((d) => {
+        if (d === hoveredCountry) return "rgba(60,60,60,1.0)";
+        const name = normalizeCountry(d.properties?.ADMIN || d.properties?.name || "");
+        return programCountries.has(name) ? "rgba(200,120,0,0.9)" : "rgba(120,123,128,0.8)";
+      })
       .polygonLabel((d) => d?.properties?.ADMIN || d?.properties?.name || "")
       .onPolygonHover((d) => { hoveredCountry = d; });
     console.log("Country borders + program shading loaded:", geo.features.length);
 
     // Country name labels + program location labels — visible when zoomed in (altitude < 1.5)
+    // Manual overrides for narrow/oddly-shaped countries where bounding box center lands outside
+    const LABEL_OVERRIDES = {
+      "vietnam": { lat: 14.5, lon: 108.5 },
+      "chile": { lat: -35.0, lon: -71.0 },
+      "norway": { lat: 65.0, lon: 14.0 },
+    };
     const countryLabels = geo.features
       .map((f) => {
         const name = f.properties?.ADMIN || f.properties?.name || "";
         if (!name) return null;
-        const nameLower = name.toLowerCase().trim();
+        const nameLower = normalizeCountry(name);
         if (!programCountries.has(nameLower)) return null;
-        const c = centroids[nameLower];
+        const override = LABEL_OVERRIDES[nameLower];
+        const c = override || centroids[nameLower];
         return c ? { name, lat: c.lat, lon: c.lon } : null;
       })
       .filter(Boolean);
