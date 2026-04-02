@@ -167,7 +167,7 @@ function makePanel(container, { onClose, onOpen } = {}) {
         "
       ></div>
       <div style="margin-top:10px; opacity:.7; font-size:12px;">
-        Tip: Select from this list.
+        Select from this list.
       </div>
     </div>
 

@@ -5156,7 +5156,7 @@ In order to be iterable, non-array objects must have a [Symbol.iterator]() metho
         "
       ></div>
       <div style="margin-top:10px; opacity:.7; font-size:12px;">
-        Tip: Select from this list.
+        Select from this list.
       </div>
     </div>
 
