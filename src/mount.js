@@ -759,6 +759,11 @@ const geojsonPromise = fetch(geojsonUrl)
       "chile": { lat: -35.0, lon: -71.0 },
       "norway": { lat: 65.0, lon: 14.0 },
     };
+    const DISPLAY_NAME_OVERRIDES = {
+      "eswatini": "Eswatini",
+      "eswatini (swaziland)": "Eswatini",
+      "swaziland": "Eswatini",
+    };
     const countryLabels = geo.features
       .map((f) => {
         const name = f.properties?.ADMIN || f.properties?.name || "";
@@ -767,7 +772,8 @@ const geojsonPromise = fetch(geojsonUrl)
         if (!programCountries.has(nameLower)) return null;
         const override = LABEL_OVERRIDES[nameLower];
         const c = override || centroids[nameLower];
-        return c ? { name, lat: c.lat, lon: c.lon } : null;
+        const displayName = DISPLAY_NAME_OVERRIDES[nameLower] || name;
+        return c ? { name: displayName, lat: c.lat, lon: c.lon } : null;
       })
       .filter(Boolean);
 
