@@ -75,7 +75,7 @@ async function loadSheetData() {
     const lon = toNum(lonRaw);
     const hasCoords = Number.isFinite(lat) && Number.isFinite(lon);
 
-    const progLoc = get(d, "all_prog_locs", "all prog locs");
+    const progLoc = get(d, "program_countries", "all_prog_locs", "all prog locs");
     const storyHtml = get(d, "story_html", "story html");
 
     // Row is a program location — capture even without coords (will geocode by country name)
@@ -83,8 +83,10 @@ async function loadSheetData() {
       programs.push({
         pin_lat: hasCoords ? lat : null,
         pin_lon: hasCoords ? lon : null,
-        name: String(progLoc),
-        country: String(get(d, "country") ?? ""),
+        name: String(get(d, "hospital_name", "program_name", "hospital / program") ?? progLoc),
+        city: String(get(d, "city_name") ?? ""),
+        country: String(get(d, "country_name", "country") ?? progLoc ?? ""),
+        progLoc: String(progLoc),
       });
     }
 
@@ -98,10 +100,9 @@ async function loadSheetData() {
         pin_lon: lon,
         pin_label: String(get(d, "pin_label", "pin label") ?? ""),
         title: String(get(d, "title") ?? ""),
-        country: String(get(d, "country") ?? ""),
+        country: String(get(d, "country", "country_name") ?? ""),
         story_html: String(storyHtml),
         image_url: String(get(d, "image_url", "image url") ?? ""),
-        source_url: String(get(d, "source_url", "source url") ?? ""),
       });
     }
   });
@@ -198,12 +199,6 @@ function makePanel(container, { onClose, onOpen } = {}) {
           <div id="sg-flip-back" style="display:none; padding:14px; background:#fafafa;
             border:1px solid rgba(0,0,0,0.08); border-radius:10px; box-sizing:border-box;">
             <div id="sg-body" style="line-height:1.45; font-size:14px;"></div>
-            <div style="margin-top:12px;">
-              <a id="sg-src" href="#" target="_blank" rel="noopener"
-                style="display:none; padding:9px 18px; background:#81BC41; color:#fff;
-                  border-radius:8px; font-weight:700; font-size:14px; text-decoration:none;
-                  letter-spacing:0.01em;">Read on SIGN</a>
-            </div>
             <div style="
               margin-top:16px; padding:10px 0 4px;
               border-top:1px solid rgba(0,0,0,0.08);
@@ -222,12 +217,6 @@ function makePanel(container, { onClose, onOpen } = {}) {
 
       <!-- Text-only view (stories without a photo) -->
       <div id="sg-body-solo" style="display:none; margin-top:10px; line-height:1.45; font-size:14px;"></div>
-      <div id="sg-src-solo-wrap" style="display:none; margin-top:14px;">
-        <a id="sg-src-solo" href="#" target="_blank" rel="noopener"
-          style="padding:9px 18px; background:#81BC41; color:#fff;
-            border-radius:8px; font-weight:700; font-size:14px; text-decoration:none;
-            letter-spacing:0.01em;">Read on SIGN</a>
-      </div>
 
     </div>
   `;
@@ -247,12 +236,9 @@ function makePanel(container, { onClose, onOpen } = {}) {
   const flipInner = panel.querySelector("#sg-flip-inner");
   const imgEl = panel.querySelector("#sg-img");
   const bodyEl = panel.querySelector("#sg-body");
-  const srcEl = panel.querySelector("#sg-src");
 
   // Text-only elements (stories without photo)
   const bodySolo = panel.querySelector("#sg-body-solo");
-  const srcSoloWrap = panel.querySelector("#sg-src-solo-wrap");
-  const srcSolo = panel.querySelector("#sg-src-solo");
 
   const flipFront = panel.querySelector("#sg-flip-front");
   const flipBack = panel.querySelector("#sg-flip-back");
@@ -270,7 +256,6 @@ function makePanel(container, { onClose, onOpen } = {}) {
 
   flipFront.addEventListener("click", () => doFlip(true));
   flipBack.addEventListener("click", () => doFlip(false));
-  srcEl.addEventListener("click", (e) => e.stopPropagation());
 
   panel.querySelector("#sg-close").onclick = () => { panel.style.display = "none"; onClose?.(); };
 
@@ -304,23 +289,14 @@ function makePanel(container, { onClose, onOpen } = {}) {
       flipBack.style.display = "none";
       imgEl.src = story.image_url;
       bodyEl.innerHTML = story.story_html || "";
-      srcEl.href = story.source_url || "#";
-      srcEl.style.display = story.source_url ? "inline" : "none";
       flipWrap.style.display = "block";
       bodySolo.style.display = "none";
-      srcSoloWrap.style.display = "none";
     } else {
       // No photo — show text directly
       flipWrap.style.display = "none";
       imgEl.src = "";
       bodySolo.innerHTML = story.story_html || "";
       bodySolo.style.display = "block";
-      if (story.source_url) {
-        srcSolo.href = story.source_url;
-        srcSoloWrap.style.display = "block";
-      } else {
-        srcSoloWrap.style.display = "none";
-      }
     }
 
     show();
@@ -713,8 +689,10 @@ const geojsonPromise = fetch(geojsonUrl)
     return COUNTRY_NAME_ALIASES[n] || n;
   };
 
+  // Build from both country field and the raw program_countries column value (stored as p.country
+  // with progLoc fallback) so nothing is missed even if country_name is blank in some rows.
   const programCountries = new Set(
-    programs.map((p) => normalizeCountry(p.country)).filter(Boolean)
+    programs.flatMap((p) => [p.country, p.progLoc].map(normalizeCountry)).filter(Boolean)
   );
   const programCapColor = (d) => {
     const name = normalizeCountry(d.properties?.ADMIN || d.properties?.name || "");
