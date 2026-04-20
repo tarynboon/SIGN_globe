@@ -861,6 +861,7 @@ const geojsonPromise = fetch(geojsonUrl)
 
   globe
     .objectsData([...storyDots, ...programDots])
+    .objectLabel(() => "")
     .objectLat((d) => d.lat)
     .objectLng((d) => d.lng)
     .objectAltitude((d) => d._type === "story" ? 0.022 : 0.018)
