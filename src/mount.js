@@ -603,7 +603,7 @@ export async function mountSignGlobe({
   // brighten it and create visible white gaps where polygon data has holes.
   const globeMat = globe.globeMaterial();
   globeMat.color.set(0x000000);
-  globeMat.emissive.set(0xc7efff);
+  globeMat.emissive.set(0xd2e7f7);
   globeMat.emissiveIntensity = 1.0;
   globeMat.shininess = 0;
 
@@ -841,7 +841,6 @@ const geojsonPromise = fetch(geojsonUrl)
     white-space:nowrap; transform:translate(-50%, -140%);
     box-shadow:0 2px 6px rgba(0,0,0,0.2);
   `;
-  tooltip.textContent = "✦ Click to read story";
   container.appendChild(tooltip);
   container.addEventListener("mousemove", (e) => {
     const rect = container.getBoundingClientRect();
@@ -876,7 +875,17 @@ const geojsonPromise = fetch(geojsonUrl)
       const cur = d ? "default" : "grab";
       if (c) c.style.cursor = cur;
       container.style.cursor = cur;
-      tooltip.style.display = (d && d._type === "story") ? "block" : "none";
+      if (!d) {
+        tooltip.style.display = "none";
+      } else if (d._type === "story") {
+        tooltip.textContent = "✦ Click to read story";
+        tooltip.style.background = "#2B7EC1";
+        tooltip.style.display = "block";
+      } else if (d._type === "program") {
+        tooltip.textContent = d.name || "Program location";
+        tooltip.style.background = "#F99F1E";
+        tooltip.style.display = "block";
+      }
     })
     .onObjectClick((d) => {
       if (!d || d._type !== "story") return;
