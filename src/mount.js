@@ -424,7 +424,7 @@ function makeProgramMarker({ scale = 5.0 } = {}) {
 }
 
 const SIGN_GREEN = "#81BC41";
-const SIGN_DARK_GREEN = "#45842E";
+const SIGN_ORANGE = "#F99F1E";
 const STORY_BLUE = "#2B7EC1";
 
 // Cache one texture per color so we don't recreate canvases for every dot
@@ -597,14 +597,14 @@ export async function mountSignGlobe({
 
   const globe = Globe()(container)
     .globeImageUrl(null)
-    .atmosphereColor("rgba(180,215,245,0.5)")
+    .atmosphereColor("rgba(171,226,247,0.5)")
     .backgroundColor("rgba(0,0,0,0)");
 
   // Set globe sphere to pure flat gray — driven entirely by emissive so lighting doesn't
   // brighten it and create visible white gaps where polygon data has holes.
   const globeMat = globe.globeMaterial();
   globeMat.color.set(0x000000);
-  globeMat.emissive.set(0xc8cbd0);
+  globeMat.emissive.set(0xabe2f7);
   globeMat.emissiveIntensity = 1.0;
   globeMat.shininess = 0;
 
@@ -734,7 +734,7 @@ const geojsonPromise = fetch(geojsonUrl)
   const programCapColor = (d) => {
     let name = normalizeCountry(d.properties?.ADMIN || d.properties?.name || "");
     if (MATCH_PARENT[name]) name = MATCH_PARENT[name];
-    return programCountries.has(name) ? "rgba(249,159,30,0.85)" : "rgba(200,203,208,1.0)";
+    return programCountries.has(name) ? "rgba(129,188,65,0.85)" : "rgba(200,203,208,1.0)";
   };
   if (geo) {
     globe
@@ -751,7 +751,7 @@ const geojsonPromise = fetch(geojsonUrl)
         if (d === hoveredCountry) return "rgba(60,60,60,1.0)";
         let name = normalizeCountry(d.properties?.ADMIN || d.properties?.name || "");
         if (MATCH_PARENT[name]) name = MATCH_PARENT[name];
-        return programCountries.has(name) ? "rgba(200,120,0,0.9)" : "rgba(120,123,128,0.8)";
+        return programCountries.has(name) ? "rgba(80,140,30,0.9)" : "rgba(120,123,128,0.8)";
       })
       .polygonLabel((d) => d?.properties?.ADMIN || d?.properties?.name || "")
       .onPolygonHover((d) => { hoveredCountry = d; });
@@ -821,7 +821,7 @@ const geojsonPromise = fetch(geojsonUrl)
 
   // Keep track of all pin sprites so we can rescale them on zoom
   const pinSprites = [];
-  const PIN_BASE_SCALE = 2.2;
+  const PIN_BASE_SCALE = 2.8;
   const PIN_BASE_ALT = 2.0;
 
   const updatePinScale = () => {
@@ -849,7 +849,7 @@ const geojsonPromise = fetch(geojsonUrl)
     .objectLng((d) => d.lng)
     .objectAltitude((d) => d._type === "story" ? 0.022 : 0.018)
     .objectThreeObject((d) => {
-      const s = makeDotSprite(d._type === "story" ? STORY_BLUE : SIGN_GREEN);
+      const s = makeDotSprite(d._type === "story" ? STORY_BLUE : SIGN_ORANGE);
       s.renderOrder = d._type === "story" ? 1000 : 999;
       pinSprites.push(s);
       return s;
@@ -919,11 +919,11 @@ const geojsonPromise = fetch(geojsonUrl)
     showStories = on; updateDots();
   }));
 
-  toggleWrap.appendChild(makeToggle("● Program Countries", "Shaded countries represent SIGN program locations", SIGN_BLUE, (on) => {
+  toggleWrap.appendChild(makeToggle("● Program Countries", "Shaded countries represent SIGN program locations", SIGN_GREEN, (on) => {
     globe.polygonCapColor(on ? programCapColor : () => "rgba(200,203,208,0.9)");
   }));
 
-  toggleWrap.appendChild(makeToggle("● Program Locations", "Dots show specific SIGN program sites", SIGN_GREEN, (on) => {
+  toggleWrap.appendChild(makeToggle("● Program Locations", "Dots show specific SIGN program sites", SIGN_ORANGE, (on) => {
     showPrograms = on; updateDots();
   }));
 
