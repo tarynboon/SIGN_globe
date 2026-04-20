@@ -603,7 +603,7 @@ export async function mountSignGlobe({
   // brighten it and create visible white gaps where polygon data has holes.
   const globeMat = globe.globeMaterial();
   globeMat.color.set(0x000000);
-  globeMat.emissive.set(0xd2e7f7);
+  globeMat.emissive.set(0xa8c9e0);
   globeMat.emissiveIntensity = 1.0;
   globeMat.shininess = 0;
 
