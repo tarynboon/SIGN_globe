@@ -427,7 +427,6 @@ const SIGN_GREEN = "#81BC41";
 const SIGN_ORANGE = "#F99F1E";
 const STORY_BLUE = "#2B7EC1";
 
-// Cache one texture per color so we don't recreate canvases for every dot
 const _dotTextureCache = {};
 
 function makeDotSprite(color) {
@@ -604,7 +603,7 @@ export async function mountSignGlobe({
   // brighten it and create visible white gaps where polygon data has holes.
   const globeMat = globe.globeMaterial();
   globeMat.color.set(0x000000);
-  globeMat.emissive.set(0xabe2f7);
+  globeMat.emissive.set(0xc7efff);
   globeMat.emissiveIntensity = 1.0;
   globeMat.shininess = 0;
 
@@ -832,6 +831,24 @@ const geojsonPromise = fetch(geojsonUrl)
   controls.addEventListener("change", updatePinScale);
   setTimeout(updatePinScale, 100);
 
+  // Hover tooltip for story dots
+  const tooltip = document.createElement("div");
+  tooltip.dataset.sgUi = "1";
+  tooltip.style.cssText = `
+    position:absolute; display:none; pointer-events:none; z-index:999999;
+    background:#2B7EC1; color:#fff; font-family:'Montserrat',sans-serif;
+    font-size:12px; font-weight:700; padding:4px 10px; border-radius:12px;
+    white-space:nowrap; transform:translate(-50%, -140%);
+    box-shadow:0 2px 6px rgba(0,0,0,0.2);
+  `;
+  tooltip.textContent = "✦ Click to read story";
+  container.appendChild(tooltip);
+  container.addEventListener("mousemove", (e) => {
+    const rect = container.getBoundingClientRect();
+    tooltip.style.left = `${e.clientX - rect.left}px`;
+    tooltip.style.top = `${e.clientY - rect.top}px`;
+  });
+
   // Normalise programs to same lat/lng shape as story pins
   const storyDots = pins.map((p) => ({ ...p, _type: "story" }));
   const programDots = programs.map((p) => ({ ...p, lat: p.pin_lat, lng: p.pin_lon, _type: "program" }));
@@ -859,6 +876,7 @@ const geojsonPromise = fetch(geojsonUrl)
       const cur = d ? "default" : "grab";
       if (c) c.style.cursor = cur;
       container.style.cursor = cur;
+      tooltip.style.display = (d && d._type === "story") ? "block" : "none";
     })
     .onObjectClick((d) => {
       if (!d || d._type !== "story") return;
@@ -915,7 +933,7 @@ const geojsonPromise = fetch(geojsonUrl)
     return btn;
   };
 
-  toggleWrap.appendChild(makeToggle("● Patient Stories", "Click on a blue pin to learn more", STORY_BLUE, (on) => {
+  toggleWrap.appendChild(makeToggle("● Patient Stories", "Click a filled blue pin to read a story", STORY_BLUE, (on) => {
     showStories = on; updateDots();
   }));
 
