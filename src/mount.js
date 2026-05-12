@@ -78,11 +78,11 @@ async function loadSheetData() {
     const progLoc = get(d, "program_countries", "all_prog_locs", "all prog locs");
     const storyHtml = get(d, "story_html", "story html");
 
-    // Row is a program location — capture even without coords (will geocode by country name)
+    // Row is a program location — always geocode from country name, never use story pin coords
     if (progLoc) {
       programs.push({
-        pin_lat: hasCoords ? lat : null,
-        pin_lon: hasCoords ? lon : null,
+        pin_lat: null,
+        pin_lon: null,
         name: String(get(d, "hospital_name", "program_name", "hospital / program") ?? progLoc),
         city: String(get(d, "city_name") ?? ""),
         country: String(get(d, "country_name", "country") ?? progLoc ?? ""),
