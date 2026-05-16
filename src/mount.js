@@ -160,7 +160,7 @@ function makePanel(container, { onClose, onOpen } = {}) {
 
     <!-- Cluster chooser -->
     <div id="sg-cluster" style="display:none; margin-top:10px;">
-      <div style="font-weight:700; margin-bottom:8px;">Choose a story</div>
+      <div id="sg-cluster-header" style="font-weight:700; margin-bottom:8px;"></div>
       <div id="sg-list"
         style="
           max-height:52vh;
@@ -169,9 +169,7 @@ function makePanel(container, { onClose, onOpen } = {}) {
           border-radius:10px;
         "
       ></div>
-      <div style="margin-top:10px; opacity:.7; font-size:12px;">
-        Select from this list.
-      </div>
+      <div id="sg-cluster-footer" style="margin-top:10px; opacity:.7; font-size:12px;"></div>
     </div>
 
     <!-- Story -->
@@ -230,6 +228,8 @@ function makePanel(container, { onClose, onOpen } = {}) {
   const metaEl = panel.querySelector("#sg-meta");
 
   const clusterWrap = panel.querySelector("#sg-cluster");
+  const clusterHeaderEl = panel.querySelector("#sg-cluster-header");
+  const clusterFooterEl = panel.querySelector("#sg-cluster-footer");
   const listEl = panel.querySelector("#sg-list");
 
   const storyWrap = panel.querySelector("#sg-story");
@@ -305,9 +305,13 @@ function makePanel(container, { onClose, onOpen } = {}) {
     show();
   }
 
-  function showCluster({ title, meta, items, onPick, onHover }) {
+  function showCluster({ title, meta, items, onPick, onHover, header = "", footer = "" }) {
     titleEl.textContent = title || "";
     metaEl.textContent = meta || "";
+    clusterHeaderEl.textContent = header;
+    clusterHeaderEl.style.display = header ? "block" : "none";
+    clusterFooterEl.textContent = footer;
+    clusterFooterEl.style.display = footer ? "block" : "none";
 
     storyWrap.style.display = "none";
     clusterWrap.style.display = "block";
@@ -331,7 +335,7 @@ function makePanel(container, { onClose, onOpen } = {}) {
       `;
       row.innerHTML = `
         <div style="font-weight:700; font-size:14px; line-height:1.25;">
-          ${escapeHtml(s.title || "(Untitled story)")}
+          ${escapeHtml(s.title || "(Untitled)")}
         </div>
         <div style="opacity:.75; font-size:12px;">
           ${escapeHtml(s.country || "")}
@@ -951,6 +955,8 @@ const geojsonPromise = fetch(geojsonUrl)
           panel.showCluster({
             title: `${d.stories.length} stories nearby`,
             meta: d.stories[0]?.country || "",
+            header: "Choose a story",
+            footer: "Select from this list.",
             items: d.stories,
             onPick: (story) => panel.showStory(story),
             onHover: () => {},
