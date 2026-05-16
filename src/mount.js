@@ -564,6 +564,36 @@ function clusterStories(stories) {
   return clusters;
 }
 
+/**
+ * Groups program dots at the same location into clusters.
+ * Returns [{ lat, lng, programs: [...] }]
+ */
+function clusterPrograms(programs) {
+  if (programs.length === 0) return [];
+
+  const CLUSTER_THRESH_DEG = 0.5; // programs within ~55km share one dot
+
+  const used = new Set();
+  const clusters = [];
+  for (let i = 0; i < programs.length; i++) {
+    if (used.has(i)) continue;
+    const group = [programs[i]];
+    used.add(i);
+    for (let j = i + 1; j < programs.length; j++) {
+      if (used.has(j)) continue;
+      if (approxDistDeg(programs[i].pin_lat, programs[i].pin_lon, programs[j].pin_lat, programs[j].pin_lon) < CLUSTER_THRESH_DEG) {
+        group.push(programs[j]);
+        used.add(j);
+      }
+    }
+    const lat = group.reduce((s, x) => s + x.pin_lat, 0) / group.length;
+    const lng = group.reduce((s, x) => s + x.pin_lon, 0) / group.length;
+    clusters.push({ lat, lng, programs: group });
+  }
+
+  return clusters;
+}
+
 /** =========================
  *  Mount
  *  ========================= */
@@ -864,9 +894,12 @@ const geojsonPromise = fetch(geojsonUrl)
     tooltip.style.top = `${e.clientY - rect.top}px`;
   });
 
-  // Normalise programs to same lat/lng shape as story pins
+  // Cluster programs so dots at the same location don't stack
+  const programClusters = clusterPrograms(programs);
+  console.log(`Clustered ${programs.length} programs into ${programClusters.length} dots`);
+
   const storyDots = pins.map((p) => ({ ...p, _type: "story" }));
-  const programDots = programs.map((p) => ({ ...p, lat: p.pin_lat, lng: p.pin_lon, _type: "program" }));
+  const programDots = programClusters.map((c) => ({ ...c, _type: "program" }));
 
   let showStories = true;
   let showPrograms = true;
@@ -899,22 +932,40 @@ const geojsonPromise = fetch(geojsonUrl)
         tooltip.style.background = "#2B7EC1";
         tooltip.style.display = "block";
       } else if (d._type === "program") {
-        tooltip.textContent = d.name || "Program location";
+        const n = d.programs.length;
+        tooltip.textContent = n === 1
+          ? (d.programs[0].name || "Program location")
+          : `${n} program locations`;
         tooltip.style.background = "#F99F1E";
         tooltip.style.display = "block";
       }
     })
     .onObjectClick((d) => {
-      if (!d || d._type !== "story") return;
+      if (!d) return;
       controls.autoRotate = false;
-      if (d.stories.length === 1) {
-        panel.showStory(d.stories[0]);
-      } else {
+
+      if (d._type === "story") {
+        if (d.stories.length === 1) {
+          panel.showStory(d.stories[0]);
+        } else {
+          panel.showCluster({
+            title: `${d.stories.length} stories nearby`,
+            meta: d.stories[0]?.country || "",
+            items: d.stories,
+            onPick: (story) => panel.showStory(story),
+            onHover: () => {},
+          });
+        }
+      } else if (d._type === "program" && d.programs.length > 1) {
+        const first = d.programs[0];
         panel.showCluster({
-          title: `${d.stories.length} stories nearby`,
-          meta: d.stories[0]?.country || "",
-          items: d.stories,
-          onPick: (story) => panel.showStory(story),
+          title: `${d.programs.length} program locations`,
+          meta: first.country || "",
+          items: d.programs.map((p) => ({
+            title: p.name,
+            country: [p.city, p.country].filter(Boolean).join(", "),
+          })),
+          onPick: () => {},
           onHover: () => {},
         });
       }
