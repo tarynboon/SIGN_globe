@@ -77,16 +77,19 @@ async function loadSheetData() {
 
     const progLoc = get(d, "program_countries", "all_prog_locs", "all prog locs");
     const storyHtml = get(d, "story_html", "story html");
+    const hospitalName = get(d, "hospital_name", "program_name", "hospital / program");
+    const countryName = get(d, "country_name", "country");
 
-    // Row is a program location — always geocode from country name, never use story pin coords
-    if (progLoc) {
+    // Row is a program location — any row with a hospital name or a program_countries value.
+    // Always geocode from country_name, never use story pin coords.
+    if (progLoc || hospitalName) {
       programs.push({
         pin_lat: null,
         pin_lon: null,
-        name: String(get(d, "hospital_name", "program_name", "hospital / program") ?? progLoc),
+        name: String(hospitalName ?? progLoc ?? countryName ?? ""),
         city: String(get(d, "city_name") ?? ""),
-        country: String(get(d, "country_name", "country") ?? progLoc ?? ""),
-        progLoc: String(progLoc),
+        country: String(countryName ?? progLoc ?? ""),
+        progLoc: String(progLoc ?? ""),
       });
     }
 
@@ -669,6 +672,13 @@ const geojsonPromise = fetch(geojsonUrl)
     ["lao people's democratic republic", "laos"],
     ["dr congo", "democratic republic of the congo"],
     ["syria", "syrian arab republic"],
+    ["gambia", "the gambia"],
+    ["eswatini", "swaziland"],
+    ["swaziland", "eswatini"],
+    ["bosnia", "bosnia and herzegovina"],
+    ["somaliland", "somalia"],
+    ["gabonese republic", "gabon"],
+    ["st. lucia", "saint lucia"],
   ];
   for (const [alias, canonical] of CENTROID_ALIASES) {
     if (!centroids[alias] && centroids[canonical]) centroids[alias] = centroids[canonical];
@@ -707,6 +717,12 @@ const geojsonPromise = fetch(geojsonUrl)
     "việt nam": "vietnam",
     "czechia": "czech republic",
     "czech republic": "czechia",
+    "gabonese republic": "gabon",
+    "gambia": "the gambia",
+    "eswatini": "swaziland",
+    "swaziland": "eswatini",
+    "bosnia": "bosnia and herzegovina",
+    "st. lucia": "saint lucia",
   };
   const normalizeCountry = (s) => {
     const n = (s || "").toLowerCase().trim();
